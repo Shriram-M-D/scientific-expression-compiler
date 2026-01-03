@@ -6,6 +6,17 @@ TARGET = compiler
 SOURCES = lexer.cpp parser.cpp ast.cpp evaluator.cpp calculus.cpp main.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
+# Detect OS for proper clean command
+ifeq ($(OS),Windows_NT)
+    RM = del /Q
+    TARGET_EXT = .exe
+    CLEAN_FILES = *.o $(TARGET).exe
+else
+    RM = rm -f
+    TARGET_EXT =
+    CLEAN_FILES = $(OBJECTS) $(TARGET)
+endif
+
 # Default target
 all: $(TARGET)
 
@@ -17,9 +28,9 @@ $(TARGET): $(OBJECTS)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Clean build artifacts
+# Clean build artifacts  
 clean:
-	rm -f $(OBJECTS) $(TARGET) $(TARGET).exe
+	-@rm -f *.o compiler.exe compiler 2>/dev/null || true
 
 # Rebuild from scratch
 rebuild: clean all
