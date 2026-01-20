@@ -39,7 +39,7 @@ function showAST(astData) {
       d3
         .linkVertical()
         .x((d) => d.x)
-        .y((d) => d.y)
+        .y((d) => d.y),
     )
     .style("stroke", "#6b7280")
     .style("stroke-width", 2)
@@ -154,6 +154,18 @@ function convertASTToHierarchy(node) {
       { type: "NUMBER", value: node.lowerBound },
       { type: "NUMBER", value: node.upperBound },
     ].filter(Boolean);
+  } else if (node.type === "NCR") {
+    result.children = [
+      convertASTToHierarchy(node.n),
+      convertASTToHierarchy(node.r),
+    ].filter(Boolean);
+  } else if (node.type === "NPR") {
+    result.children = [
+      convertASTToHierarchy(node.n),
+      convertASTToHierarchy(node.r),
+    ].filter(Boolean);
+  } else if (node.type === "FACTORIAL") {
+    result.children = [convertASTToHierarchy(node.operand)].filter(Boolean);
   }
 
   return result;
@@ -169,6 +181,9 @@ function getNodeColor(type) {
     FUNCTION_CALL: "#8b5cf6",
     DIFF_NODE: "#ef4444",
     INTEGRATE_NODE: "#06b6d4",
+    NCR: "#3b82f6",
+    NPR: "#3b82f6",
+    FACTORIAL: "#f97316",
   };
   return colors[type] || "#3b82f6";
 }
@@ -191,6 +206,12 @@ function getNodeLabel(node) {
     return "d/dx";
   } else if (node.type === "INTEGRATE_NODE") {
     return "∫";
+  } else if (node.type === "NCR") {
+    return "nCr";
+  } else if (node.type === "NPR") {
+    return "nPr";
+  } else if (node.type === "FACTORIAL") {
+    return "!";
   }
 
   return node.type || "?";

@@ -105,6 +105,71 @@ std::string Evaluator::generateIntermediateCode(std::shared_ptr<ASTNode> node) {
             return temp;
         }
         
+        case ASTNodeType::FACTORIAL: {
+            auto factNode = std::dynamic_pointer_cast<FactorialNode>(node);
+            std::string operand = generateIntermediateCode(factNode->operand);
+            std::string temp = newTemp();
+            code << temp << " = fact " << operand;
+            intermediateCode.push_back(code.str());
+            return temp;
+        }
+        
+        case ASTNodeType::NCR: {
+            auto ncrNode = std::dynamic_pointer_cast<NCrNode>(node);
+            std::string n = generateIntermediateCode(ncrNode->n);
+            std::string r = generateIntermediateCode(ncrNode->r);
+            
+            // Generate: t_fact_n = fact n
+            std::string factN = newTemp();
+            intermediateCode.push_back(factN + " = fact " + n);
+            
+            // Generate: t_fact_r = fact r
+            std::string factR = newTemp();
+            intermediateCode.push_back(factR + " = fact " + r);
+            
+            // Generate: t_n_minus_r = n - r
+            std::string nMinusR = newTemp();
+            intermediateCode.push_back(nMinusR + " = " + n + " - " + r);
+            
+            // Generate: t_fact_n_minus_r = fact (n-r)
+            std::string factNMinusR = newTemp();
+            intermediateCode.push_back(factNMinusR + " = fact " + nMinusR);
+            
+            // Generate: t_denom = t_fact_r * t_fact_n_minus_r
+            std::string denom = newTemp();
+            intermediateCode.push_back(denom + " = " + factR + " * " + factNMinusR);
+            
+            // Generate: t_result = t_fact_n / t_denom
+            std::string temp = newTemp();
+            intermediateCode.push_back(temp + " = " + factN + " / " + denom);
+            
+            return temp;
+        }
+        
+        case ASTNodeType::NPR: {
+            auto nprNode = std::dynamic_pointer_cast<NPrNode>(node);
+            std::string n = generateIntermediateCode(nprNode->n);
+            std::string r = generateIntermediateCode(nprNode->r);
+            
+            // Generate: t_fact_n = fact n
+            std::string factN = newTemp();
+            intermediateCode.push_back(factN + " = fact " + n);
+            
+            // Generate: t_n_minus_r = n - r
+            std::string nMinusR = newTemp();
+            intermediateCode.push_back(nMinusR + " = " + n + " - " + r);
+            
+            // Generate: t_fact_n_minus_r = fact (n-r)
+            std::string factNMinusR = newTemp();
+            intermediateCode.push_back(factNMinusR + " = fact " + nMinusR);
+            
+            // Generate: t_result = t_fact_n / t_fact_n_minus_r
+            std::string temp = newTemp();
+            intermediateCode.push_back(temp + " = " + factN + " / " + factNMinusR);
+            
+            return temp;
+        }
+        
         default:
             throw std::runtime_error("Unknown node type in code generation");
     }
@@ -213,6 +278,59 @@ double Evaluator::evaluateNode(std::shared_ptr<ASTNode> node) {
                 this, 
                 steps
             );
+        }
+        
+        case ASTNodeType::FACTORIAL: {
+            auto factNode = std::dynamic_pointer_cast<FactorialNode>(node);
+            double operand = evaluateNode(factNode->operand);
+            return factorial(operand);
+        }
+        
+        case ASTNodeType::NCR: {
+            auto ncrNode = std::dynamic_pointer_cast<NCrNode>(node);
+            double n = evaluateNode(ncrNode->n);
+            double r = evaluateNode(ncrNode->r);
+            
+            // Semantic validation
+            if (n < 0 || r < 0) {
+                throw std::runtime_error("nCr requires non-negative integers");
+            }
+            if (n != std::floor(n) || r != std::floor(r)) {
+                throw std::runtime_error("nCr requires integer arguments");
+            }
+            if (r > n) {
+                throw std::runtime_error("nCr requires n >= r");
+            }
+            
+            // Calculate nCr = n! / (r! * (n-r)!)
+            double nFact = factorial(n);
+            double rFact = factorial(r);
+            double nMinusRFact = factorial(n - r);
+            
+            return nFact / (rFact * nMinusRFact);
+        }
+        
+        case ASTNodeType::NPR: {
+            auto nprNode = std::dynamic_pointer_cast<NPrNode>(node);
+            double n = evaluateNode(nprNode->n);
+            double r = evaluateNode(nprNode->r);
+            
+            // Semantic validation
+            if (n < 0 || r < 0) {
+                throw std::runtime_error("nPr requires non-negative integers");
+            }
+            if (n != std::floor(n) || r != std::floor(r)) {
+                throw std::runtime_error("nPr requires integer arguments");
+            }
+            if (r > n) {
+                throw std::runtime_error("nPr requires n >= r");
+            }
+            
+            // Calculate nPr = n! / (n-r)!
+            double nFact = factorial(n);
+            double nMinusRFact = factorial(n - r);
+            
+            return nFact / nMinusRFact;
         }
         
         default:

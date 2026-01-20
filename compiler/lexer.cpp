@@ -29,6 +29,10 @@ Lexer::Lexer(const std::string& input) : input(input), position(0) {
     functions["diff"] = TokenType::FUNCTION;
     functions["integrate"] = TokenType::FUNCTION;
     
+    // Combinatorics functions
+    functions["nCr"] = TokenType::FUNCTION;
+    functions["nPr"] = TokenType::FUNCTION;
+    
     // Initialize constants
     constants["pi"] = M_PI;
     constants["e"] = M_E;

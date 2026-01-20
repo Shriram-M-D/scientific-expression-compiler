@@ -44,3 +44,21 @@ std::string IntegrateNode::toString() const {
         << ", " << lowerBound << ", " << upperBound << ")";
     return oss.str();
 }
+
+std::string FactorialNode::toString() const {
+    std::ostringstream oss;
+    oss << "(" << operand->toString() << ")!";
+    return oss.str();
+}
+
+std::string NCrNode::toString() const {
+    std::ostringstream oss;
+    oss << "nCr(" << n->toString() << ", " << r->toString() << ")";
+    return oss.str();
+}
+
+std::string NPrNode::toString() const {
+    std::ostringstream oss;
+    oss << "nPr(" << n->toString() << ", " << r->toString() << ")";
+    return oss.str();
+}

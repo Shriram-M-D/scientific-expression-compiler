@@ -146,54 +146,70 @@ std::shared_ptr<ASTNode> Parser::buildASTFromPostfix(const std::vector<Token>& p
             nodeStack.push(std::make_shared<VariableNode>(token.value));
         }
         else if (token.type == TokenType::FUNCTION) {
-            if (token.value == "diff" || token.value == "integrate") {
-                // Special handling for calculus functions
-                if (token.value == "diff") {
-                    if (nodeStack.size() < 3) {
-                        throw std::runtime_error("diff requires 3 arguments");
-                    }
-                    auto point = nodeStack.top(); nodeStack.pop();
-                    auto var = nodeStack.top(); nodeStack.pop();
-                    auto expr = nodeStack.top(); nodeStack.pop();
-                    
-                    if (var->type != ASTNodeType::VARIABLE) {
-                        throw std::runtime_error("diff second argument must be a variable");
-                    }
-                    // Allow point to be any expression - will be evaluated
-                    
-                    auto varNode = std::dynamic_pointer_cast<VariableNode>(var);
-                    
-                    // Evaluate the point expression to get the numeric value
-                    Evaluator evalPoint;
-                    double pointValue = evalPoint.evaluate(point);
-                    
-                    nodeStack.push(std::make_shared<DiffNode>(
-                        expr, varNode->name, pointValue));
+            // Special handling for multi-argument functions
+            if (token.value == "diff") {
+                if (nodeStack.size() < 3) {
+                    throw std::runtime_error("diff requires 3 arguments");
                 }
-                else if (token.value == "integrate") {
-                    if (nodeStack.size() < 4) {
-                        throw std::runtime_error("integrate requires 4 arguments");
-                    }
-                    auto upper = nodeStack.top(); nodeStack.pop();
-                    auto lower = nodeStack.top(); nodeStack.pop();
-                    auto var = nodeStack.top(); nodeStack.pop();
-                    auto expr = nodeStack.top(); nodeStack.pop();
-                    
-                    if (var->type != ASTNodeType::VARIABLE) {
-                        throw std::runtime_error("integrate second argument must be a variable");
-                    }
-                    // Allow bounds to be any expression - will be evaluated
-                    
-                    auto varNode = std::dynamic_pointer_cast<VariableNode>(var);
-                    
-                    // Evaluate the bound expressions to get numeric values
-                    Evaluator evalBounds;
-                    double lowerValue = evalBounds.evaluate(lower);
-                    double upperValue = evalBounds.evaluate(upper);
-                    
-                    nodeStack.push(std::make_shared<IntegrateNode>(
-                        expr, varNode->name, lowerValue, upperValue));
+                auto point = nodeStack.top(); nodeStack.pop();
+                auto var = nodeStack.top(); nodeStack.pop();
+                auto expr = nodeStack.top(); nodeStack.pop();
+                
+                if (var->type != ASTNodeType::VARIABLE) {
+                    throw std::runtime_error("diff second argument must be a variable");
                 }
+                // Allow point to be any expression - will be evaluated
+                
+                auto varNode = std::dynamic_pointer_cast<VariableNode>(var);
+                
+                // Evaluate the point expression to get the numeric value
+                Evaluator evalPoint;
+                double pointValue = evalPoint.evaluate(point);
+                
+                nodeStack.push(std::make_shared<DiffNode>(
+                    expr, varNode->name, pointValue));
+            }
+            else if (token.value == "integrate") {
+                if (nodeStack.size() < 4) {
+                    throw std::runtime_error("integrate requires 4 arguments");
+                }
+                auto upper = nodeStack.top(); nodeStack.pop();
+                auto lower = nodeStack.top(); nodeStack.pop();
+                auto var = nodeStack.top(); nodeStack.pop();
+                auto expr = nodeStack.top(); nodeStack.pop();
+                
+                if (var->type != ASTNodeType::VARIABLE) {
+                    throw std::runtime_error("integrate second argument must be a variable");
+                }
+                // Allow bounds to be any expression - will be evaluated
+                
+                auto varNode = std::dynamic_pointer_cast<VariableNode>(var);
+                
+                // Evaluate the bound expressions to get numeric values
+                Evaluator evalBounds;
+                double lowerValue = evalBounds.evaluate(lower);
+                double upperValue = evalBounds.evaluate(upper);
+                
+                nodeStack.push(std::make_shared<IntegrateNode>(
+                    expr, varNode->name, lowerValue, upperValue));
+            }
+            else if (token.value == "nCr") {
+                if (nodeStack.size() < 2) {
+                    throw std::runtime_error("nCr requires 2 arguments");
+                }
+                auto r = nodeStack.top(); nodeStack.pop();
+                auto n = nodeStack.top(); nodeStack.pop();
+                
+                nodeStack.push(std::make_shared<NCrNode>(n, r));
+            }
+            else if (token.value == "nPr") {
+                if (nodeStack.size() < 2) {
+                    throw std::runtime_error("nPr requires 2 arguments");
+                }
+                auto r = nodeStack.top(); nodeStack.pop();
+                auto n = nodeStack.top(); nodeStack.pop();
+                
+                nodeStack.push(std::make_shared<NPrNode>(n, r));
             }
             else if (token.value == "neg") {
                 if (nodeStack.empty()) {
@@ -222,7 +238,7 @@ std::shared_ptr<ASTNode> Parser::buildASTFromPostfix(const std::vector<Token>& p
             }
             auto operand = nodeStack.top();
             nodeStack.pop();
-            nodeStack.push(std::make_shared<UnaryOpNode>("!", operand));
+            nodeStack.push(std::make_shared<FactorialNode>(operand));
         }
         else if (isOperator(token)) {
             if (nodeStack.size() < 2) {

@@ -22,6 +22,11 @@
     <!-- Chart.js for function plotting -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <!-- Highlight.js for assembly syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/x86asm.min.js"></script>
+
     <!-- Mermaid.js for compiler flow diagrams -->
     <script type="module">
       import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
@@ -218,6 +223,9 @@
           <button onclick="setExample('sin(pi/2)')" class="token-badge text-xs">sin(π/2)</button>
           <button onclick="setExample('2^10')" class="token-badge text-xs">2^10</button>
           <button onclick="setExample('5!')" class="token-badge text-xs">5!</button>
+          <button onclick="setExample('nCr(10,3)')" class="token-badge text-xs">nCr(10,3)</button>
+          <button onclick="setExample('nPr(10,3)')" class="token-badge text-xs">nPr(10,3)</button>
+          <button onclick="setExample('nCr(5,2)/nCr(10,2)')" class="token-badge text-xs">nCr(5,2)/nCr(10,2)</button>
           <button onclick="setExample('diff(x^2, x, 3)')" class="token-badge text-xs">diff(x^2, x, 3)</button>
           <button onclick="setExample('integrate(x^2, x, 0, 3)')" class="token-badge text-xs">integrate(x^2, x, 0, 3)</button>
         </div>
@@ -310,6 +318,244 @@
         </div>
       </div>
 
+      <!-- Object File Analysis Section -->
+      <div id="objectAnalysisSection" class="mb-6">
+        <div class="glass-card p-8">
+          <div class="mb-6">
+            <h3 class="text-3xl font-bold mb-3" style="color: var(--text-primary);">
+              🔍 Machine-Level Object File Analysis
+            </h3>
+            <p class="text-base" style="color: var(--text-secondary);">
+              Analyze compiled object files to understand low-level machine representation
+            </p>
+          </div>
+          
+          <!-- Control Panel -->
+          <div class="flex flex-wrap gap-4 mb-6">
+            <button
+              onclick="buildObjectFiles()"
+              class="px-6 py-3 rounded-lg font-semibold text-base transition-all shadow-lg hover:shadow-xl"
+              style="background: var(--accent); color: white;"
+              id="buildBtn"
+            >
+              🔨 Build Object Files
+            </button>
+            <button
+              onclick="analyzeObject('O0')"
+              class="px-6 py-3 rounded-lg font-semibold text-base transition-all shadow-lg hover:shadow-xl"
+              style="background: #10b981; color: white;"
+              id="analyzeO0Btn"
+            >
+              📊 Analyze -O0
+            </button>
+            <button
+              onclick="analyzeObject('O2')"
+              class="px-6 py-3 rounded-lg font-semibold text-base transition-all shadow-lg hover:shadow-xl"
+              style="background: #f59e0b; color: white;"
+              id="analyzeO2Btn"
+            >
+              ⚡ Analyze -O2
+            </button>
+            <button
+              onclick="compareOptimizations()"
+              class="px-6 py-3 rounded-lg font-semibold text-base transition-all shadow-lg hover:shadow-xl"
+              style="background: #8b5cf6; color: white;"
+              id="compareBtn"
+            >
+              🔄 Compare Optimizations
+            </button>
+          </div>
+
+          <!-- Status Display -->
+          <div id="analysisStatus" class="hidden mb-6 p-4 rounded-lg" style="background: var(--bg-secondary); border-left: 4px solid var(--accent);">
+            <p id="statusMessage" class="font-medium" style="color: var(--text-primary);"></p>
+          </div>
+
+          <!-- Tabs for different views -->
+          <div class="flex gap-1 mb-6 border-b-2 pb-0" style="border-color: var(--border);">
+            <button
+              onclick="switchAnalysisTab('disassembly')"
+              class="px-6 py-3 font-semibold text-base transition-all rounded-t-lg"
+              id="tab-disassembly"
+              style="color: var(--text-secondary); background: transparent;"
+            >
+              📝 Disassembly
+            </button>
+            <button
+              onclick="switchAnalysisTab('symbols')"
+              class="px-6 py-3 font-semibold text-base transition-all rounded-t-lg"
+              id="tab-symbols"
+              style="color: var(--text-secondary); background: transparent;"
+            >
+              🔖 Symbol Table
+            </button>
+            <button
+              onclick="switchAnalysisTab('sections')"
+              class="px-6 py-3 font-semibold text-base transition-all rounded-t-lg"
+              id="tab-sections"
+              style="color: var(--text-secondary); background: transparent;"
+            >
+              📂 ELF Sections
+            </button>
+            <button
+              onclick="switchAnalysisTab('metrics')"
+              class="px-6 py-3 font-semibold text-base transition-all rounded-t-lg"
+              id="tab-metrics"
+              style="color: var(--text-secondary); background: transparent;"
+            >
+              📏 Size Metrics
+            </button>
+            <button
+              onclick="switchAnalysisTab('comparison')"
+              class="px-6 py-3 font-semibold text-base transition-all rounded-t-lg"
+              id="tab-comparison"
+              style="color: var(--text-secondary); background: transparent;"
+            >
+              📊 Comparison
+            </button>
+          </div>
+
+          <!-- Tab Content -->
+          <div id="analysisContent" class="min-h-96">
+            <!-- Disassembly View -->
+            <div id="view-disassembly" class="analysis-view hidden">
+              <div class="mb-6 p-4 rounded-lg" style="background: var(--bg-secondary);">
+                <h4 class="text-lg font-semibold mb-3" style="color: var(--text-primary);">
+                  Assembly Instructions
+                </h4>
+                <div id="disassemblyStats" class="flex gap-6 text-base">
+                  <span style="color: var(--text-primary);">
+                    Functions: <strong class="text-xl" style="color: var(--accent);" id="funcCount">0</strong>
+                  </span>
+                  <span style="color: var(--text-primary);">
+                    Instructions: <strong class="text-xl" style="color: #10b981;" id="instCount">0</strong>
+                  </span>
+                </div>
+              </div>
+              <div id="disassemblyCode" class="code-block mb-6" style="max-height: 500px; overflow-y: auto;">
+                <p style="color: var(--text-secondary);">No disassembly data. Build and analyze an object file first.</p>
+              </div>
+              <div class="mt-6 p-4 rounded-lg" style="background: var(--bg-secondary);">
+                <h4 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">
+                  Instruction Frequency (Top 15)
+                </h4>
+                <canvas id="instructionChart" style="max-height: 350px;"></canvas>
+              </div>
+            </div>
+
+            <!-- Symbol Table View -->
+            <div id="view-symbols" class="analysis-view hidden">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="p-4 rounded-lg" style="background: var(--bg-secondary);">
+                  <h4 class="text-lg font-semibold mb-3" style="color: var(--text-primary);">
+                    Global Symbols (<span style="color: var(--accent);" id="globalCount">0</span>)
+                  </h4>
+                  <div id="globalSymbols" class="code-block" style="max-height: 400px; overflow-y: auto;">
+                    <p style="color: var(--text-secondary);">No symbols</p>
+                  </div>
+                </div>
+                <div class="p-4 rounded-lg" style="background: var(--bg-secondary);">
+                  <h4 class="text-lg font-semibold mb-3" style="color: var(--text-primary);">
+                    Local Symbols (<span style="color: #10b981;" id="localCount">0</span>)
+                  </h4>
+                  <div id="localSymbols" class="code-block" style="max-height: 400px; overflow-y: auto;">
+                    <p style="color: var(--text-secondary);">No symbols</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ELF Sections View -->
+            <div id="view-sections" class="analysis-view hidden">
+              <div class="p-4 rounded-lg" style="background: var(--bg-secondary);">
+                <div id="sectionsTable" class="overflow-x-auto">
+                  <table class="w-full text-base">
+                    <thead>
+                      <tr style="border-bottom: 2px solid var(--border);">
+                        <th class="text-left p-3 font-semibold" style="color: var(--text-primary);">Name</th>
+                        <th class="text-left p-3 font-semibold" style="color: var(--text-primary);">Type</th>
+                        <th class="text-left p-3 font-semibold" style="color: var(--text-primary);">Address</th>
+                        <th class="text-left p-3 font-semibold" style="color: var(--text-primary);">Size</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sectionsBody" style="color: var(--text-primary);">
+                      <tr><td colspan="4" class="p-3" style="color: var(--text-secondary);">No sections data</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Size Metrics View -->
+            <div id="view-metrics" class="analysis-view hidden">
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="p-6 rounded-lg text-center transition-all hover:scale-105" style="background: var(--bg-secondary); border-top: 4px solid var(--accent);">
+                  <p class="text-sm mb-2 font-medium" style="color: var(--text-secondary);">.text (Code)</p>
+                  <p class="text-3xl font-bold mb-1" style="color: var(--accent);" id="textSize">0</p>
+                  <p class="text-sm" style="color: var(--text-secondary);">bytes</p>
+                </div>
+                <div class="p-6 rounded-lg text-center transition-all hover:scale-105" style="background: var(--bg-secondary); border-top: 4px solid #10b981;">
+                  <p class="text-sm mb-2 font-medium" style="color: var(--text-secondary);">.data</p>
+                  <p class="text-3xl font-bold mb-1" style="color: #10b981;" id="dataSize">0</p>
+                  <p class="text-sm" style="color: var(--text-secondary);">bytes</p>
+                </div>
+                <div class="p-6 rounded-lg text-center transition-all hover:scale-105" style="background: var(--bg-secondary); border-top: 4px solid #f59e0b;">
+                  <p class="text-sm mb-2 font-medium" style="color: var(--text-secondary);">.bss</p>
+                  <p class="text-3xl font-bold mb-1" style="color: #f59e0b;" id="bssSize">0</p>
+                  <p class="text-sm" style="color: var(--text-secondary);">bytes</p>
+                </div>
+                <div class="p-6 rounded-lg text-center transition-all hover:scale-105" style="background: var(--bg-secondary); border-top: 4px solid #8b5cf6;">
+                  <p class="text-sm mb-2 font-medium" style="color: var(--text-secondary);">Total</p>
+                  <p class="text-3xl font-bold mb-1" style="color: #8b5cf6;" id="totalSize">0</p>
+                  <p class="text-sm" style="color: var(--text-secondary);">bytes</p>
+                </div>
+              </div>
+              <div class="p-6 rounded-lg" style="background: var(--bg-secondary);">
+                <h4 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Memory Breakdown</h4>
+                <canvas id="sizeChart" style="max-height: 350px;"></canvas>
+              </div>
+            </div>
+
+            <!-- Comparison View -->
+            <div id="view-comparison" class="analysis-view hidden">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div class="p-6 rounded-lg" style="background: var(--bg-secondary);">
+                  <h4 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">
+                    Instruction Count Comparison
+                  </h4>
+                  <canvas id="comparisonInstChart"></canvas>
+                </div>
+                <div class="p-6 rounded-lg" style="background: var(--bg-secondary);">
+                  <h4 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">
+                    Binary Size Comparison
+                  </h4>
+                  <canvas id="comparisonSizeChart"></canvas>
+                </div>
+              </div>
+              <div class="p-6 rounded-lg" style="background: var(--bg-secondary);">
+                <h4 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">
+                  Optimization Impact
+                </h4>
+                <div id="optimizationStats" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div class="text-center p-4 rounded-lg" style="background: var(--bg-primary);">
+                    <p class="text-sm mb-2" style="color: var(--text-secondary);">Instruction Reduction</p>
+                    <p class="text-3xl font-bold mt-2" style="color: var(--accent);" id="instReduction">-</p>
+                  </div>
+                  <div class="text-center p-4 rounded-lg" style="background: var(--bg-primary);">
+                    <p class="text-sm mb-2" style="color: var(--text-secondary);">Size Reduction</p>
+                    <p class="text-3xl font-bold mt-2" style="color: #10b981;" id="sizeReduction">-</p>
+                  </div>
+                  <div class="text-center p-4 rounded-lg" style="background: var(--bg-primary);">
+                    <p class="text-sm mb-2" style="color: var(--text-secondary);">Reduction Percentage</p>
+                    <p class="text-3xl font-bold mt-2" style="color: #f59e0b;" id="reductionPercent">-</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Error Section -->
       <div id="errorSection" class="hidden mb-6">
         <div class="glass-card p-6" style="border: 2px solid #ef4444;">
@@ -353,5 +599,6 @@
     </script>
     <script src="/js/app.js"></script>
     <script src="/js/visualizer.js"></script>
+    <script src="/js/object-analysis.js"></script>
   </body>
 </html>

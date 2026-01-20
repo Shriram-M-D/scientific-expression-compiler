@@ -97,6 +97,26 @@ std::string astToJSON(std::shared_ptr<ASTNode> node) {
             json << "\"expression\":" << astToJSON(intNode->expression);
             break;
         }
+        case ASTNodeType::FACTORIAL: {
+            auto factNode = std::dynamic_pointer_cast<FactorialNode>(node);
+            json << "\"type\":\"FACTORIAL\",";
+            json << "\"operand\":" << astToJSON(factNode->operand);
+            break;
+        }
+        case ASTNodeType::NCR: {
+            auto ncrNode = std::dynamic_pointer_cast<NCrNode>(node);
+            json << "\"type\":\"NCR\",";
+            json << "\"n\":" << astToJSON(ncrNode->n) << ",";
+            json << "\"r\":" << astToJSON(ncrNode->r);
+            break;
+        }
+        case ASTNodeType::NPR: {
+            auto nprNode = std::dynamic_pointer_cast<NPrNode>(node);
+            json << "\"type\":\"NPR\",";
+            json << "\"n\":" << astToJSON(nprNode->n) << ",";
+            json << "\"r\":" << astToJSON(nprNode->r);
+            break;
+        }
     }
     
     json << "}";

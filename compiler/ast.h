@@ -14,7 +14,10 @@ enum class ASTNodeType {
     UNARY_OP,
     FUNCTION_CALL,
     DIFF_NODE,
-    INTEGRATE_NODE
+    INTEGRATE_NODE,
+    FACTORIAL,
+    NCR,
+    NPR
 };
 
 // Base AST Node
@@ -106,6 +109,38 @@ public:
                   double lower, double upper)
         : ASTNode(ASTNodeType::INTEGRATE_NODE), expression(expr), 
           variable(var), lowerBound(lower), upperBound(upper) {}
+    std::string toString() const override;
+};
+
+// Factorial Node (unary postfix operator)
+class FactorialNode : public ASTNode {
+public:
+    std::shared_ptr<ASTNode> operand;
+    
+    FactorialNode(std::shared_ptr<ASTNode> oper)
+        : ASTNode(ASTNodeType::FACTORIAL), operand(oper) {}
+    std::string toString() const override;
+};
+
+// nCr Node (combinations)
+class NCrNode : public ASTNode {
+public:
+    std::shared_ptr<ASTNode> n;
+    std::shared_ptr<ASTNode> r;
+    
+    NCrNode(std::shared_ptr<ASTNode> n_val, std::shared_ptr<ASTNode> r_val)
+        : ASTNode(ASTNodeType::NCR), n(n_val), r(r_val) {}
+    std::string toString() const override;
+};
+
+// nPr Node (permutations)
+class NPrNode : public ASTNode {
+public:
+    std::shared_ptr<ASTNode> n;
+    std::shared_ptr<ASTNode> r;
+    
+    NPrNode(std::shared_ptr<ASTNode> n_val, std::shared_ptr<ASTNode> r_val)
+        : ASTNode(ASTNodeType::NPR), n(n_val), r(r_val) {}
     std::string toString() const override;
 };
 
