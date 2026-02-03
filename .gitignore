@@ -4,6 +4,7 @@
 *.exe
 *.out
 *.app
+*.tex
 
 # Python
 __pycache__/
