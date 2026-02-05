@@ -1,0 +1,318 @@
+================================================================================
+                    DSA PROJECT - PHASE 2 FEATURE ADDITIONS
+================================================================================
+
+Project: Mathematical Expression Compiler & Visualizer
+Phase: 2
+Date: January-February 2026
+Author: Development Team
+
+================================================================================
+                              OVERVIEW
+================================================================================
+
+This phase introduced two major feature categories to the compiler system:
+1. Machine-Level Object File Analysis
+2. Probability & Combinatorics (PnC) Language Support
+
+Both features are fully integrated into the existing compiler pipeline and 
+frontend visualization system.
+
+
+================================================================================
+                    FEATURE 1: OBJECT FILE ANALYSIS
+================================================================================
+
+DESCRIPTION:
+------------
+Advanced tooling for analyzing compiled object files at the machine level,
+providing insights into assembly instructions, symbol tables, ELF sections,
+and optimization impact.
+
+CAPABILITIES:
+-------------
+1. Build & Compile
+   - Generate object files with different optimization levels (-O0, -O2)
+   - Automated compilation workflow from C++ source
+
+2. Disassembly Analysis
+   - Extract and display assembly instructions
+   - Function-level code breakdown
+   - Instruction frequency statistics
+   - Visual instruction distribution charts
+
+3. Symbol Table Inspection
+   - Global symbols listing
+   - Local symbols listing
+   - Symbol counts and categorization
+   - Address and binding information
+
+4. ELF Section Analysis
+   - Section headers and metadata
+   - Memory layout visualization
+   - Section types and addresses
+   - Size metrics per section
+
+5. Size Metrics
+   - .text (code) section size
+   - .data section size
+   - .bss section size
+   - Total binary size tracking
+   - Visual memory breakdown charts
+
+6. Optimization Comparison
+   - Side-by-side -O0 vs -O2 comparison
+   - Instruction count reduction metrics
+   - Binary size reduction analysis
+   - Percentage improvement calculations
+   - Comparative visualization charts
+
+TECHNICAL IMPLEMENTATION:
+-------------------------
+Backend (Flask):
+- /api/object/build - Builds object files with g++
+- /api/object/analyze - Analyzes object files using objdump/readelf
+- /api/object/compare - Compares optimization levels
+
+Frontend:
+- 5 tabbed interface sections (Disassembly, Symbols, Sections, Metrics, Comparison)
+- Chart.js integration for visual analytics
+- Real-time status updates
+- Interactive data exploration
+
+Tools Integrated:
+- objdump (disassembly)
+- readelf (ELF headers and sections)
+- size (section metrics)
+
+FILES MODIFIED/ADDED:
+---------------------
+- backend/app.py - Added object file analysis endpoints
+- frontend/index.html - Added object analysis section UI
+- frontend/js/object-analysis.js - NEW: Analysis logic & visualization
+- frontend/css/style.css - Added styling for analysis section
+
+
+================================================================================
+            FEATURE 2: PROBABILITY & COMBINATORICS SUPPORT
+================================================================================
+
+DESCRIPTION:
+------------
+First-class language support for Probability and Combinatorics operations
+as formal compiler constructs, fully integrated into lexer, parser, AST,
+evaluator, and visualization pipeline.
+
+NEW OPERATORS & FUNCTIONS:
+---------------------------
+1. Factorial (!)
+   - Syntax: n!
+   - Example: 5! → 120
+   - Postfix unary operator
+   - Range: 0 ≤ n ≤ 170 (overflow protection)
+
+2. Combinations - nCr
+   - Syntax: nCr(n, r)
+   - Example: nCr(10, 3) → 120
+   - Formula: n! / (r! × (n-r)!)
+   - Semantic validation: n ≥ r ≥ 0
+
+3. Permutations - nPr
+   - Syntax: nPr(n, r)
+   - Example: nPr(10, 3) → 720
+   - Formula: n! / (n-r)!
+   - Semantic validation: n ≥ r ≥ 0
+
+4. Complex Expressions
+   - Example: nCr(5,2) / nCr(10,2) → 0.222222
+   - Full arithmetic integration
+   - Supports nested operations
+
+COMPILER PIPELINE INTEGRATION:
+-------------------------------
+1. Lexer (lexer.cpp)
+   - Added '!' token for FACTORIAL
+   - Added nCr, nPr to function map
+   - Token type: FUNCTION for nCr/nPr
+
+2. Parser (parser.cpp)
+   - Postfix operator handling for factorial
+   - Two-argument function parsing for nCr/nPr
+   - Operator precedence integration
+
+3. AST (ast.h, ast.cpp)
+   - New node types: FACTORIAL, NCR, NPR
+   - FactorialNode class (unary operand)
+   - NCrNode class (n, r children)
+   - NPrNode class (n, r children)
+   - toString() implementations
+
+4. Evaluator (evaluator.cpp)
+   - Factorial computation (iterative algorithm)
+   - nCr evaluation using factorial formula
+   - nPr evaluation using factorial formula
+   - Semantic validation:
+     * Integer-only enforcement
+     * Range checks (n ≥ r ≥ 0)
+     * Overflow prevention (n ≤ 170)
+
+5. Intermediate Code Generation (evaluator.cpp)
+   - Factorial: "t = fact n"
+   - nCr: Expanded to arithmetic operations
+   - nPr: Expanded to arithmetic operations
+   - Three-address code lowering
+
+6. JSON Output (main.cpp)
+   - AST serialization for FACTORIAL nodes
+   - AST serialization for NCR nodes
+   - AST serialization for NPR nodes
+   - Proper child node structure
+
+7. Frontend Visualization (visualizer.js)
+   - AST tree rendering for NCR/NPR (n, r children)
+   - AST tree rendering for FACTORIAL (operand child)
+   - Node colors and labels
+   - Integrated into main AST tab
+
+SEMANTIC VALIDATION:
+--------------------
+- Type checking: All arguments must be integers
+- Range validation: n ≥ r ≥ 0 for nCr and nPr
+- Overflow protection: Factorial limited to n ≤ 170
+- Error messages: Clear semantic error reporting
+
+EXAMPLE EXPRESSIONS:
+--------------------
+Basic Operations:
+  5!                → 120
+  nCr(10, 3)        → 120
+  nPr(10, 3)        → 720
+
+Complex Expressions:
+  nCr(5, 2) / nCr(10, 2)     → 0.222222
+  nCr(8, 3) + nPr(5, 2)      → 76
+  10! / (3! * 7!)            → 120
+
+FRONTEND INTEGRATION:
+---------------------
+- Example buttons in main input area:
+  * 5!
+  * nCr(10,3)
+  * nPr(10,3)
+  * nCr(5,2)/nCr(10,2)
+- Unified AST visualization
+- No separate PnC section (fully integrated)
+- Works with all existing features
+
+FILES MODIFIED/ADDED:
+---------------------
+Compiler Core:
+- compiler/lexer.h - Added FACTORIAL token type
+- compiler/lexer.cpp - Added factorial and nCr/nPr function tokens
+- compiler/ast.h - Added FACTORIAL, NCR, NPR node types and classes
+- compiler/ast.cpp - Added toString() for new nodes
+- compiler/parser.cpp - Added parsing for factorial and nCr/nPr
+- compiler/evaluator.h - Added evaluation method signatures
+- compiler/evaluator.cpp - Added evaluation logic and semantic validation
+- compiler/main.cpp - Added JSON serialization for PnC AST nodes
+
+Frontend:
+- frontend/index.html - Added PnC example buttons
+- frontend/js/visualizer.js - Added PnC node visualization support
+
+Documentation:
+- README.md - Added comprehensive PnC documentation
+
+
+================================================================================
+                          TECHNICAL HIGHLIGHTS
+================================================================================
+
+OBJECT FILE ANALYSIS:
+---------------------
+- Real-time compilation and analysis workflow
+- Multi-level optimization comparison
+- Visual analytics with Chart.js
+- Clean separation between build tools and analysis
+- Cross-platform compatibility (Linux/Windows with WSL)
+
+PNC SUPPORT:
+------------
+- Full compiler pipeline integration (lexer → evaluator)
+- Semantic validation at compile time
+- Efficient factorial computation (iterative)
+- Overflow prevention mechanisms
+- AST visualization with proper tree structure
+- Intermediate code generation with lowering
+
+
+================================================================================
+                            BUILD & TESTING
+================================================================================
+
+COMPILATION:
+------------
+cd compiler
+g++ -o compiler.exe main.cpp lexer.cpp parser.cpp ast.cpp evaluator.cpp calculus.cpp -std=c++17
+
+TESTING PNC:
+------------
+echo "5!" | .\compiler.exe
+echo "nCr(10,3)" | .\compiler.exe
+echo "nPr(10,3)" | .\compiler.exe
+echo "nCr(5,2)/nCr(10,2)" | .\compiler.exe
+
+Expected Results:
+- 5! = 120
+- nCr(10,3) = 120
+- nPr(10,3) = 720
+- nCr(5,2)/nCr(10,2) = 0.222222
+
+
+================================================================================
+                          KNOWN LIMITATIONS
+================================================================================
+
+OBJECT FILE ANALYSIS:
+---------------------
+- Requires Unix-like environment (WSL on Windows)
+- objdump/readelf must be installed
+- Limited to x86-64 architecture
+
+PNC SUPPORT:
+------------
+- Factorial overflow at n > 170
+- Integer-only arguments (no floating-point)
+- nCr/nPr require non-negative integers
+
+
+================================================================================
+                          FUTURE ENHANCEMENTS
+================================================================================
+
+Potential additions for Phase 3:
+- Binomial probability distributions
+- Statistical functions (mean, variance, etc.)
+- Graph theory functions (combinations with constraints)
+- More advanced object file metrics (cache analysis, branch prediction)
+- Interactive disassembly editing
+
+
+================================================================================
+                              CONCLUSION
+================================================================================
+
+Phase 2 successfully extended the compiler system with:
+1. Professional-grade object file analysis tools
+2. Native Probability & Combinatorics language support
+
+Both features integrate seamlessly with the existing architecture while
+maintaining code quality, performance, and user experience standards.
+
+Total files modified: 15+
+Total lines of code added: 2000+
+Testing coverage: All core functionality validated
+
+================================================================================
+                            END OF DOCUMENT
+================================================================================

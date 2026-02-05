@@ -37,7 +37,7 @@ async function compileExpression() {
     }
   } catch (error) {
     showError(
-      `Network error: ${error.message}. Make sure the backend server is running.`
+      `Network error: ${error.message}. Make sure the backend server is running.`,
     );
   }
 }
@@ -78,6 +78,9 @@ function displayResults(data) {
   if (data.calculusType !== "none" && data.calculusSteps) {
     showCalculusVisualization(data);
   }
+
+  // Show expression optimization section
+  document.getElementById("expressionOptSection").classList.remove("hidden");
 }
 
 // Show tokens with color coding
@@ -109,7 +112,7 @@ function showTokens(tokens) {
     badge.className = `token-badge ${colorMap[token.type] || ""}`;
     badge.style.animationDelay = `${index * 0.05}s`;
     badge.innerHTML = `<strong>${escapeHtml(
-      token.value
+      token.value,
     )}</strong> <small style="opacity: 0.6;">${token.type}</small>`;
     container.appendChild(badge);
   });
@@ -139,7 +142,7 @@ function showIntermediateCode(code) {
       (line, i) =>
         `<div style="animation-delay: ${i * 0.1}s" class="fadeIn">${
           i + 1
-        }. ${escapeHtml(line)}</div>`
+        }. ${escapeHtml(line)}</div>`,
     )
     .join("");
 }
@@ -154,8 +157,8 @@ function showCalculusVisualization(data) {
     .map(
       (step, i) =>
         `<div style="animation-delay: ${i * 0.05}s" class="fadeIn">${escapeHtml(
-          step.description
-        )}</div>`
+          step.description,
+        )}</div>`,
     )
     .join("");
 
@@ -192,7 +195,7 @@ function createCalculusChart(data) {
       xValues.push(x);
       // Find corresponding y value from steps or interpolate
       const closestStep = steps.reduce((prev, curr) =>
-        Math.abs(curr.x - x) < Math.abs(prev.x - x) ? curr : prev
+        Math.abs(curr.x - x) < Math.abs(prev.x - x) ? curr : prev,
       );
       yValues.push(closestStep.fx);
     }
@@ -231,7 +234,7 @@ function createCalculusChart(data) {
             display: true,
             labels: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--text-primary"
+                "--text-primary",
               ),
               font: { size: 12 },
             },
@@ -240,7 +243,7 @@ function createCalculusChart(data) {
             display: true,
             text: "Function and Differentiation Point",
             color: getComputedStyle(document.body).getPropertyValue(
-              "--text-primary"
+              "--text-primary",
             ),
             font: { size: 14 },
           },
@@ -250,26 +253,26 @@ function createCalculusChart(data) {
             type: "linear",
             ticks: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--text-secondary"
+                "--text-secondary",
               ),
               font: { size: 10 },
             },
             grid: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--border"
+                "--border",
               ),
             },
           },
           y: {
             ticks: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--text-secondary"
+                "--text-secondary",
               ),
               font: { size: 10 },
             },
             grid: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--border"
+                "--border",
               ),
             },
           },
@@ -305,7 +308,7 @@ function createCalculusChart(data) {
             display: true,
             labels: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--text-primary"
+                "--text-primary",
               ),
               font: { size: 12 },
             },
@@ -314,7 +317,7 @@ function createCalculusChart(data) {
             display: true,
             text: `Integration Area = ${data.result.toFixed(6)}`,
             color: getComputedStyle(document.body).getPropertyValue(
-              "--text-primary"
+              "--text-primary",
             ),
             font: { size: 14 },
           },
@@ -323,26 +326,26 @@ function createCalculusChart(data) {
           x: {
             ticks: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--text-secondary"
+                "--text-secondary",
               ),
               font: { size: 10 },
             },
             grid: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--border"
+                "--border",
               ),
             },
           },
           y: {
             ticks: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--text-secondary"
+                "--text-secondary",
               ),
               font: { size: 10 },
             },
             grid: {
               color: getComputedStyle(document.body).getPropertyValue(
-                "--border"
+                "--border",
               ),
             },
           },
@@ -368,6 +371,93 @@ function hideAllSections() {
   document.getElementById("intermediateSection").classList.add("hidden");
   document.getElementById("calculusSection").classList.add("hidden");
   document.getElementById("errorSection").classList.add("hidden");
+  document.getElementById("expressionOptSection").classList.add("hidden");
+}
+
+// Analyze expression optimization
+async function analyzeExpressionOptimization() {
+  const input = document.getElementById("expressionInput").value.trim();
+
+  if (!input) {
+    showError("Please enter an expression first");
+    return;
+  }
+
+  // Show the section and loading state
+  const section = document.getElementById("expressionOptSection");
+  const loading = document.getElementById("exprOptLoading");
+  const results = document.getElementById("exprOptResults");
+  const errorDiv = document.getElementById("exprOptError");
+
+  section.classList.remove("hidden");
+  loading.classList.remove("hidden");
+  results.classList.add("hidden");
+  errorDiv.classList.add("hidden");
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/object/analyze-expression`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ expression: input }),
+      },
+    );
+
+    const data = await response.json();
+    loading.classList.add("hidden");
+
+    if (data.success) {
+      // Display sizes
+      document.getElementById("o0Size").textContent = formatBytes(data.O0.size);
+      document.getElementById("o2Size").textContent = formatBytes(data.O2.size);
+
+      // Display instruction counts
+      document.getElementById("o0Instructions").textContent =
+        data.O0.assembly_lines;
+      document.getElementById("o2Instructions").textContent =
+        data.O2.assembly_lines;
+
+      // Display improvements
+      const sizeReduction = data.improvement.size_reduction_percent;
+      const instrReduction = data.improvement.instruction_reduction_percent;
+
+      document.getElementById("sizeReduction").textContent =
+        `${sizeReduction > 0 ? "-" : "+"}${Math.abs(sizeReduction).toFixed(1)}%`;
+      document.getElementById("instrReduction").textContent =
+        `${instrReduction > 0 ? "-" : "+"}${Math.abs(instrReduction).toFixed(1)}%`;
+
+      results.classList.remove("hidden");
+    } else {
+      errorDiv.classList.remove("hidden");
+      // Show detailed error information
+      let errorMsg = data.error || "Analysis failed";
+      if (data.details) {
+        errorMsg += "\n\nCompilation Error:\n" + data.details;
+      }
+      if (data.cpp_code) {
+        errorMsg += "\n\nGenerated C++ Code:\n" + data.cpp_code;
+      }
+      errorDiv.querySelector("p").textContent = errorMsg;
+      errorDiv.querySelector("p").style.whiteSpace = "pre-wrap";
+      errorDiv.querySelector("p").style.fontFamily = "monospace";
+      errorDiv.querySelector("p").style.fontSize = "12px";
+    }
+  } catch (error) {
+    loading.classList.add("hidden");
+    errorDiv.classList.remove("hidden");
+    errorDiv.querySelector("p").textContent =
+      `Network error: ${error.message}. Make sure the backend server is running.`;
+  }
+}
+
+// Format bytes to human-readable
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(2) + " MB";
 }
 
 // Utility functions

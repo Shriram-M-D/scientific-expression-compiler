@@ -1,0 +1,2873 @@
+================================================================================
+          COMPREHENSIVE LINE-BY-LINE CODE EXPLANATION
+          DSA Project: Mathematical Expression Compiler
+================================================================================
+
+TABLE OF CONTENTS:
+==================
+1. Project Architecture Overview
+2. Compiler Components (C++)
+   - lexer.h & lexer.cpp
+   - ast.h & ast.cpp
+   - parser.h & parser.cpp
+   - evaluator.h & evaluator.cpp
+   - calculus.h & calculus.cpp
+   - main.cpp
+3. Backend Components (Python)
+   - app.py
+   - object_analyzer.py
+4. Frontend Components (JavaScript/HTML/CSS)
+   - index.html
+   - app.js
+   - visualizer.js
+   - object-analysis.js
+   - style.css
+5. Build System
+   - Makefile
+6. Common Questions & Answers
+
+
+================================================================================
+                    1. PROJECT ARCHITECTURE OVERVIEW
+================================================================================
+
+SYSTEM FLOW:
+------------
+User Input (Frontend) → Flask Backend → C++ Compiler → Results → Frontend Display
+
+LAYERS:
+-------
+1. Presentation Layer (Frontend)
+   - HTML: User interface structure
+   - CSS: Styling and theming
+   - JavaScript: Interactive logic, API calls, visualizations
+
+2. Application Layer (Backend)
+   - Flask: REST API server
+   - Routes: Handle HTTP requests
+   - Process Manager: Execute C++ compiler subprocess
+
+3. Compiler Layer (C++)
+   - Lexer: Break input into tokens
+   - Parser: Build Abstract Syntax Tree (AST)
+   - Evaluator: Calculate results
+   - Code Generator: Produce intermediate code
+
+DATA FLOW EXAMPLE:
+------------------
+Input: "2 + 3 * 4"
+
+Step 1: Frontend sends POST to /api/compile
+Step 2: Backend runs: ./compiler.exe "2 + 3 * 4"
+Step 3: Lexer creates: [NUM(2), PLUS, NUM(3), MULT, NUM(4)]
+Step 4: Parser converts to postfix: [2, 3, 4, *, +]
+Step 5: Parser builds AST: BinaryOp(+, 2, BinaryOp(*, 3, 4))
+Step 6: Evaluator computes: 14
+Step 7: JSON output returned to backend
+Step 8: Frontend displays result and visualizations
+
+
+================================================================================
+                    2. COMPILER COMPONENTS (C++)
+================================================================================
+
+--------------------------------------------------------------------------------
+                            2.1 LEXER.H
+--------------------------------------------------------------------------------
+
+PURPOSE: Defines token types and the Lexer class for lexical analysis
+
+LINE-BY-LINE EXPLANATION:
+--------------------------
+
+Lines 1-2: Header Guards
+    #ifndef LEXER_H
+    #define LEXER_H
+    
+    WHY: Prevents multiple inclusion of the same header file during compilation.
+    HOW IT WORKS: First time included, LEXER_H is not defined, so code is processed.
+                  Second time, LEXER_H is already defined, so code is skipped.
+
+Lines 4-6: Standard Library Includes
+    #include <string>
+    #include <vector>
+    #include <unordered_map>
+    
+    WHAT THEY DO:
+    - string: For text manipulation (token values, expressions)
+    - vector: Dynamic array for storing tokens
+    - unordered_map: Hash table for fast lookup of functions and constants
+
+Lines 8-18: TokenType Enum
+    enum class TokenType {
+        NUMBER,         // Numeric literal like 42, 3.14
+        PLUS,          // + operator
+        MINUS,         // - operator
+        MULTIPLY,      // * operator
+        DIVIDE,        // / operator
+        MODULO,        // % operator
+        POWER,         // ^ operator
+        LPAREN,        // ( left parenthesis
+        RPAREN,        // ) right parenthesis
+        COMMA,         // , for function arguments
+        FACTORIAL,     // ! postfix factorial
+        FUNCTION,      // sin, cos, nCr, etc.
+        CONSTANT,      // pi, e
+        VARIABLE,      // x, y, z
+        END,           // End of input
+        INVALID        // Error token
+    };
+    
+    WHY ENUM CLASS: Type-safe enumeration (cannot accidentally use int for TokenType)
+    
+    FACULTY Q: "Why do we need different token types?"
+    ANSWER: "Each type has different parsing rules. Numbers are operands, operators need
+            precedence, functions need argument parsing. Token types allow the parser to
+            make correct decisions about how to build the expression tree."
+
+Lines 20-28: Token Structure
+    struct Token {
+        TokenType type;          // What kind of token
+        std::string value;       // The actual text ("+", "sin", "42")
+        double numValue;         // Numeric value (only for NUMBER/CONSTANT)
+        int precedence;          // Operator precedence (PEMDAS)
+        bool rightAssociative;   // Right-to-left evaluation (like ^)
+        
+        Token(TokenType t = TokenType::INVALID, const std::string& v = "", double nv = 0.0)
+            : type(t), value(v), numValue(nv), precedence(0), rightAssociative(false) {}
+    };
+    
+    WHAT IS PRECEDENCE:
+    - Determines order of operations
+    - Example: 2 + 3 * 4 = 2 + (3 * 4) = 14, not (2 + 3) * 4 = 20
+    - Precedence values: 1=+/-, 2=*/%, 3=^, 4=!
+    
+    WHAT IS RIGHT ASSOCIATIVE:
+    - Normal (left): 2 - 3 - 4 = (2 - 3) - 4 = -5
+    - Right: 2 ^ 3 ^ 2 = 2 ^ (3 ^ 2) = 2 ^ 9 = 512
+    
+    FACULTY Q: "Why store both 'value' and 'numValue'?"
+    ANSWER: "value is the original text for debugging and display. numValue is the parsed
+            number for calculations. Example: value='3.14', numValue=3.14 (double)"
+
+Lines 30-49: Lexer Class
+    class Lexer {
+    private:
+        std::string input;                                    // Expression being tokenized
+        size_t position;                                      // Current read position
+        std::unordered_map<std::string, TokenType> functions; // "sin" -> FUNCTION
+        std::unordered_map<std::string, double> constants;    // "pi" -> 3.14159...
+        
+        char currentChar();      // Get character at position
+        char peek(int offset);   // Look ahead without advancing
+        void advance();          // Move to next character
+        void skipWhitespace();   // Ignore spaces/tabs
+        Token readNumber();      // Parse numeric literal
+        Token readIdentifier();  // Parse function/variable/constant name
+        
+    public:
+        Lexer(const std::string& input);     // Constructor
+        std::vector<Token> tokenize();        // Main method: string -> tokens
+        static std::string tokenTypeToString(TokenType type); // For JSON output
+    };
+    
+    WHY PRIVATE METHODS: Internal helper functions, user only needs tokenize()
+    
+    FACULTY Q: "Why use unordered_map instead of map?"
+    ANSWER: "unordered_map uses hash table (O(1) lookup), map uses tree (O(log n)).
+            For function names, we just need fast lookup, not sorted order."
+
+
+--------------------------------------------------------------------------------
+                            2.2 LEXER.CPP
+--------------------------------------------------------------------------------
+
+PURPOSE: Implements the lexical analyzer - converts string to tokens
+
+Lines 1-12: Includes and Constants
+    #include "lexer.h"
+    #include <cctype>      // isdigit(), isalpha(), isspace()
+    #include <cmath>       // M_PI, M_E
+    #include <stdexcept>   // std::runtime_error
+    
+    #ifndef M_PI
+    #define M_PI 3.14159265358979323846
+    #endif
+    
+    #ifndef M_E
+    #define M_E 2.71828182845904523536
+    #endif
+    
+    WHY: Some compilers don't define M_PI, M_E by default. We define them as fallback.
+
+Lines 14-39: Constructor - Initialize Function and Constant Maps
+    Lexer::Lexer(const std::string& input) : input(input), position(0) {
+        // Mathematical functions
+        functions["sin"] = TokenType::FUNCTION;
+        functions["cos"] = TokenType::FUNCTION;
+        functions["tan"] = TokenType::FUNCTION;
+        functions["asin"] = TokenType::FUNCTION;    // arcsin
+        functions["acos"] = TokenType::FUNCTION;    // arccos
+        functions["atan"] = TokenType::FUNCTION;    // arctan
+        functions["log"] = TokenType::FUNCTION;     // log base 10
+        functions["ln"] = TokenType::FUNCTION;      // natural log
+        functions["exp"] = TokenType::FUNCTION;     // e^x
+        functions["sqrt"] = TokenType::FUNCTION;    // square root
+        functions["cbrt"] = TokenType::FUNCTION;    // cube root
+        functions["abs"] = TokenType::FUNCTION;     // absolute value
+        
+        // Calculus functions
+        functions["diff"] = TokenType::FUNCTION;
+        functions["integrate"] = TokenType::FUNCTION;
+        
+        // Combinatorics functions
+        functions["nCr"] = TokenType::FUNCTION;     // Combinations
+        functions["nPr"] = TokenType::FUNCTION;     // Permutations
+        
+        // Constants
+        constants["pi"] = M_PI;    // 3.14159...
+        constants["e"] = M_E;      // 2.71828...
+    }
+    
+    INITIALIZATION LIST: ": input(input), position(0)"
+    - Faster than assignment in constructor body
+    - Required for const members and references
+    
+    FACULTY Q: "How does the lexer know 'sin' is a function and not a variable?"
+    ANSWER: "We check the functions map first in readIdentifier(). If found, return
+            FUNCTION token. Otherwise, check constants. If still not found, it's a VARIABLE."
+
+Lines 41-55: Character Access Methods
+    char Lexer::currentChar() {
+        if (position >= input.length()) return '\0';  // End of string
+        return input[position];
+    }
+    
+    char Lexer::peek(int offset) {
+        size_t pos = position + offset;
+        if (pos >= input.length()) return '\0';
+        return input[pos];
+    }
+    
+    void Lexer::advance() {
+        position++;
+    }
+    
+    void Lexer::skipWhitespace() {
+        while (std::isspace(currentChar())) {
+            advance();
+        }
+    }
+    
+    WHY RETURN '\0': Null character signals end-of-string in C/C++
+    
+    PEEK USE CASE: When we see '.', peek ahead to check if digit follows (decimal number)
+
+Lines 57-73: Number Reading
+    Token Lexer::readNumber() {
+        std::string number;
+        bool hasDecimal = false;
+        
+        // Read digits and optional decimal point
+        while (std::isdigit(currentChar()) || currentChar() == '.') {
+            if (currentChar() == '.') {
+                if (hasDecimal) break;  // Second decimal point - stop
+                hasDecimal = true;
+            }
+            number += currentChar();
+            advance();
+        }
+        
+        double value = std::stod(number);  // String to double conversion
+        return Token(TokenType::NUMBER, number, value);
+    }
+    
+    EXAMPLES:
+    Input: "42"     -> Token(NUMBER, "42", 42.0)
+    Input: "3.14"   -> Token(NUMBER, "3.14", 3.14)
+    Input: "2.5.5"  -> Token(NUMBER, "2.5", 2.5) then next call gets ".5"
+    
+    FACULTY Q: "What if user types '3.14.15'?"
+    ANSWER: "First call to readNumber() gets '3.14', stops at second dot. Next
+            tokenize iteration will try to read '.15' and get another number."
+
+Lines 75-95: Identifier Reading
+    Token Lexer::readIdentifier() {
+        std::string identifier;
+        
+        // Read alphanumeric characters and underscores
+        while (std::isalnum(currentChar()) || currentChar() == '_') {
+            identifier += currentChar();
+            advance();
+        }
+        
+        // Check if it's a function
+        if (functions.find(identifier) != functions.end()) {
+            return Token(TokenType::FUNCTION, identifier);
+        }
+        
+        // Check if it's a constant
+        if (constants.find(identifier) != constants.end()) {
+            return Token(TokenType::CONSTANT, identifier, constants[identifier]);
+        }
+        
+        // Otherwise, it's a variable
+        return Token(TokenType::VARIABLE, identifier);
+    }
+    
+    PRIORITY ORDER: Function > Constant > Variable
+    
+    EXAMPLES:
+    "sin"    -> FUNCTION (found in functions map)
+    "pi"     -> CONSTANT (found in constants map, value=3.14159...)
+    "x"      -> VARIABLE (not in either map)
+    "myVar"  -> VARIABLE (not in either map)
+
+Lines 97-193: Main Tokenize Loop
+    std::vector<Token> Lexer::tokenize() {
+        std::vector<Token> tokens;
+        
+        while (position < input.length()) {
+            skipWhitespace();
+            
+            if (position >= input.length()) break;
+            
+            char c = currentChar();
+            
+            // CASE 1: Numbers (digit or decimal point followed by digit)
+            if (std::isdigit(c) || (c == '.' && std::isdigit(peek()))) {
+                tokens.push_back(readNumber());
+            }
+            // CASE 2: Identifiers (letters or underscore)
+            else if (std::isalpha(c) || c == '_') {
+                tokens.push_back(readIdentifier());
+            }
+            // CASE 3: Operators and punctuation
+            else {
+                Token token;
+                switch (c) {
+                    case '+':
+                        token = Token(TokenType::PLUS, "+");
+                        token.precedence = 1;
+                        break;
+                    case '-':
+                        token = Token(TokenType::MINUS, "-");
+                        token.precedence = 1;
+                        break;
+                    case '*':
+                        token = Token(TokenType::MULTIPLY, "*");
+                        token.precedence = 2;
+                        break;
+                    case '/':
+                        token = Token(TokenType::DIVIDE, "/");
+                        token.precedence = 2;
+                        break;
+                    case '%':
+                        token = Token(TokenType::MODULO, "%");
+                        token.precedence = 2;
+                        break;
+                    case '^':
+                        token = Token(TokenType::POWER, "^");
+                        token.precedence = 3;
+                        token.rightAssociative = true;  // 2^3^2 = 2^(3^2)
+                        break;
+                    case '!':
+                        token = Token(TokenType::FACTORIAL, "!");
+                        token.precedence = 4;  // Highest precedence
+                        break;
+                    case '(':
+                        token = Token(TokenType::LPAREN, "(");
+                        break;
+                    case ')':
+                        token = Token(TokenType::RPAREN, ")");
+                        break;
+                    case ',':
+                        token = Token(TokenType::COMMA, ",");
+                        break;
+                    default:
+                        advance();
+                        continue;  // Skip unknown characters
+                }
+                tokens.push_back(token);
+                advance();
+            }
+        }
+        
+        // Add END token
+        tokens.push_back(Token(TokenType::END, ""));
+        return tokens;
+    }
+    
+    PRECEDENCE LEVELS:
+    1. Factorial (!)       - Precedence 4 (highest)
+    2. Power (^)           - Precedence 3
+    3. Multiply/Divide (*, /, %) - Precedence 2
+    4. Add/Subtract (+, -) - Precedence 1 (lowest)
+    
+    FACULTY Q: "Why is factorial precedence 4?"
+    ANSWER: "Factorial is postfix and binds tightly to operand. 2 + 3! = 2 + 6 = 8,
+            not (2 + 3)! = 5! = 120. Higher precedence = evaluated first."
+
+    COMPLETE TOKENIZATION EXAMPLE:
+    Input: "2 + sin(pi)"
+    
+    Position 0: '2' -> isdigit -> readNumber() -> Token(NUMBER, "2", 2.0)
+    Position 2: '+' -> case '+' -> Token(PLUS, "+", precedence=1)
+    Position 4: 's' -> isalpha -> readIdentifier() -> "sin" -> Token(FUNCTION, "sin")
+    Position 7: '(' -> case '(' -> Token(LPAREN, "(")
+    Position 8: 'p' -> isalpha -> readIdentifier() -> "pi" -> Token(CONSTANT, "pi", 3.14159)
+    Position 10: ')' -> case ')' -> Token(RPAREN, ")")
+    Position 11: end -> Token(END, "")
+    
+    Result: [NUMBER(2), PLUS, FUNCTION(sin), LPAREN, CONSTANT(pi, 3.14159), RPAREN, END]
+
+
+--------------------------------------------------------------------------------
+                            2.3 AST.H
+--------------------------------------------------------------------------------
+
+PURPOSE: Defines Abstract Syntax Tree node types and classes
+
+WHAT IS AN AST:
+    Tree representation of code structure
+    Example: 2 + 3 * 4
+    
+    Infix: 2 + 3 * 4
+    
+    AST:      +
+            /   \
+           2     *
+                / \
+               3   4
+    
+    This structure respects precedence (* before +)
+
+Lines 8-18: ASTNodeType Enum
+    enum class ASTNodeType {
+        NUMBER,          // Leaf node: numeric value
+        VARIABLE,        // Leaf node: variable name
+        BINARY_OP,       // Internal node: +, -, *, /, %, ^
+        UNARY_OP,        // Internal node: negation
+        FUNCTION_CALL,   // Internal node: sin, cos, etc.
+        DIFF_NODE,       // Internal node: differentiation
+        INTEGRATE_NODE,  // Internal node: integration
+        FACTORIAL,       // Internal node: n!
+        NCR,            // Internal node: nCr(n, r)
+        NPR             // Internal node: nPr(n, r)
+    };
+    
+    LEAF vs INTERNAL:
+    - Leaf: No children (numbers, variables)
+    - Internal: Has children (operators, functions)
+
+Lines 20-27: Base ASTNode Class
+    class ASTNode {
+    public:
+        ASTNodeType type;
+        virtual ~ASTNode() = default;           // Virtual destructor for polymorphism
+        virtual std::string toString() const = 0;  // Pure virtual: must override
+        
+    protected:
+        ASTNode(ASTNodeType t) : type(t) {}     // Protected: only derived classes create
+    };
+    
+    POLYMORPHISM:
+    - Base pointer (ASTNode*) can point to any derived class
+    - Virtual functions enable runtime dispatch
+    - Example: ASTNode* node = new NumberNode(5); node->toString() calls NumberNode::toString()
+    
+    PURE VIRTUAL (= 0):
+    - Must be implemented by derived classes
+    - Makes ASTNode abstract (cannot instantiate directly)
+
+Lines 29-36: NumberNode
+    class NumberNode : public ASTNode {
+    public:
+        double value;
+        
+        NumberNode(double v) : ASTNode(ASTNodeType::NUMBER), value(v) {}
+        std::string toString() const override;
+    };
+    
+    EXAMPLE: Expression "42" creates NumberNode(42.0)
+    toString() returns "42" or "42.0"
+
+Lines 38-45: VariableNode
+    class VariableNode : public ASTNode {
+    public:
+        std::string name;
+        
+        VariableNode(const std::string& n) : ASTNode(ASTNodeType::VARIABLE), name(n) {}
+        std::string toString() const override;
+    };
+    
+    EXAMPLE: Expression "x" creates VariableNode("x")
+    toString() returns "x"
+
+Lines 47-59: BinaryOpNode
+    class BinaryOpNode : public ASTNode {
+    public:
+        std::string op;                  // Operator: "+", "-", "*", "/", "%", "^"
+        std::shared_ptr<ASTNode> left;   // Left child subtree
+        std::shared_ptr<ASTNode> right;  // Right child subtree
+        
+        BinaryOpNode(const std::string& operation, 
+                     std::shared_ptr<ASTNode> l, 
+                     std::shared_ptr<ASTNode> r)
+            : ASTNode(ASTNodeType::BINARY_OP), op(operation), left(l), right(r) {}
+        std::string toString() const override;
+    };
+    
+    SMART POINTERS (shared_ptr):
+    - Automatic memory management
+    - Reference counting
+    - No manual delete needed
+    
+    EXAMPLE: "2 + 3"
+    Tree: BinaryOpNode("+", NumberNode(2), NumberNode(3))
+    toString() returns "(2 + 3)"
+
+Lines 61-70: UnaryOpNode
+    class UnaryOpNode : public ASTNode {
+    public:
+        std::string op;                  // Operator: "neg" for unary minus
+        std::shared_ptr<ASTNode> operand;
+        
+        UnaryOpNode(const std::string& operation, std::shared_ptr<ASTNode> oper)
+            : ASTNode(ASTNodeType::UNARY_OP), op(operation), operand(oper) {}
+        std::string toString() const override;
+    };
+    
+    EXAMPLE: "-x"
+    Tree: UnaryOpNode("neg", VariableNode("x"))
+    toString() returns "(-x)"
+
+Lines 72-81: FunctionCallNode
+    class FunctionCallNode : public ASTNode {
+    public:
+        std::string name;                                // Function name: "sin", "cos", etc.
+        std::vector<std::shared_ptr<ASTNode>> arguments; // Function arguments
+        
+        FunctionCallNode(const std::string& n) 
+            : ASTNode(ASTNodeType::FUNCTION_CALL), name(n) {}
+        std::string toString() const override;
+    };
+    
+    EXAMPLE: "sin(pi/2)"
+    Tree: FunctionCallNode("sin", [BinaryOpNode("/", VariableNode("pi"), NumberNode(2))])
+    toString() returns "sin((pi / 2))"
+
+Lines 83-93: DiffNode
+    class DiffNode : public ASTNode {
+    public:
+        std::shared_ptr<ASTNode> expression;  // Function to differentiate
+        std::string variable;                  // Variable to differentiate with respect to
+        double point;                          // Point at which to evaluate derivative
+        
+        DiffNode(std::shared_ptr<ASTNode> expr, const std::string& var, double pt)
+            : ASTNode(ASTNodeType::DIFF_NODE), expression(expr), variable(var), point(pt) {}
+        std::string toString() const override;
+    };
+    
+    CALCULUS CONCEPT:
+    diff(x^2, x, 3) means: Find derivative of x^2 with respect to x, evaluated at x=3
+    
+    Mathematical: d/dx(x^2)|_{x=3} = 2x|_{x=3} = 2(3) = 6
+    
+    EXAMPLE: "diff(x^2, x, 3)"
+    Tree: DiffNode(BinaryOpNode("^", VariableNode("x"), NumberNode(2)), "x", 3.0)
+
+Lines 95-107: IntegrateNode
+    class IntegrateNode : public ASTNode {
+    public:
+        std::shared_ptr<ASTNode> expression;  // Function to integrate
+        std::string variable;                  // Integration variable
+        double lowerBound;                     // Lower limit
+        double upperBound;                     // Upper limit
+        
+        IntegrateNode(std::shared_ptr<ASTNode> expr, const std::string& var, 
+                      double lower, double upper)
+            : ASTNode(ASTNodeType::INTEGRATE_NODE), expression(expr), 
+              variable(var), lowerBound(lower), upperBound(upper) {}
+        std::string toString() const override;
+    };
+    
+    CALCULUS CONCEPT:
+    integrate(x^2, x, 0, 3) means: ∫₀³ x² dx
+    
+    Mathematical: ∫₀³ x² dx = [x³/3]₀³ = 27/3 - 0 = 9
+    
+    EXAMPLE: "integrate(x^2, x, 0, 3)"
+    Tree: IntegrateNode(BinaryOpNode("^", VariableNode("x"), NumberNode(2)), "x", 0.0, 3.0)
+
+Lines 109-117: FactorialNode
+    class FactorialNode : public ASTNode {
+    public:
+        std::shared_ptr<ASTNode> operand;  // Expression to apply factorial to
+        
+        FactorialNode(std::shared_ptr<ASTNode> oper)
+            : ASTNode(ASTNodeType::FACTORIAL), operand(oper) {}
+        std::string toString() const override;
+    };
+    
+    EXAMPLE: "5!"
+    Tree: FactorialNode(NumberNode(5))
+    toString() returns "(5)!"
+    Result: 120
+
+Lines 119-128: NCrNode (Combinations)
+    class NCrNode : public ASTNode {
+    public:
+        std::shared_ptr<ASTNode> n;  // Total items
+        std::shared_ptr<ASTNode> r;  // Items to choose
+        
+        NCrNode(std::shared_ptr<ASTNode> n_val, std::shared_ptr<ASTNode> r_val)
+            : ASTNode(ASTNodeType::NCR), n(n_val), r(r_val) {}
+        std::string toString() const override;
+    };
+    
+    COMBINATORICS CONCEPT:
+    nCr(n, r) = "n choose r" = number of ways to choose r items from n items
+    Formula: nCr(n, r) = n! / (r! × (n-r)!)
+    
+    EXAMPLE: nCr(5, 2)
+    Meaning: How many ways to choose 2 items from 5?
+    Calculation: 5! / (2! × 3!) = 120 / (2 × 6) = 120 / 12 = 10
+    
+    Real world: Choose 2 students from class of 5: AB, AC, AD, AE, BC, BD, BE, CD, CE, DE = 10 ways
+
+Lines 130-139: NPrNode (Permutations)
+    class NPrNode : public ASTNode {
+    public:
+        std::shared_ptr<ASTNode> n;  // Total items
+        std::shared_ptr<ASTNode> r;  // Items to arrange
+        
+        NPrNode(std::shared_ptr<ASTNode> n_val, std::shared_ptr<ASTNode> r_val)
+            : ASTNode(ASTNodeType::NPR), n(n_val), r(r_val) {}
+        std::string toString() const override;
+    };
+    
+    COMBINATORICS CONCEPT:
+    nPr(n, r) = "n permute r" = number of ways to arrange r items from n items
+    Formula: nPr(n, r) = n! / (n-r)!
+    
+    EXAMPLE: nPr(5, 2)
+    Meaning: How many ways to arrange 2 items from 5?
+    Calculation: 5! / 3! = 120 / 6 = 20
+    
+    Difference from nCr: Order matters!
+    nCr: AB = BA (same combination)
+    nPr: AB ≠ BA (different permutations)
+    
+    Real world: Choose and arrange 2 students from 5:
+    AB, BA, AC, CA, AD, DA, AE, EA, BC, CB, BD, DB, BE, EB, CD, DC, CE, EC, DE, ED = 20 ways
+
+
+--------------------------------------------------------------------------------
+                            2.4 PARSER.H
+--------------------------------------------------------------------------------
+
+PURPOSE: Defines the Parser class for syntax analysis and AST construction
+
+Lines 1-6: Includes
+    #ifndef PARSER_H
+    #define PARSER_H
+    
+    #include <vector>
+    #include <stack>
+    #include <memory>
+    #include "lexer.h"
+    #include "ast.h"
+    
+    WHY stack: Used in Shunting Yard algorithm for operator ordering
+
+Lines 8-39: Parser Class
+    class Parser {
+    private:
+        std::vector<Token> tokens;   // Input tokens from lexer
+        size_t position;              // Current token position
+        
+        Token currentToken();
+        Token peek(int offset = 1);
+        void advance();
+        bool isOperator(const Token& token);
+        bool isFunction(const Token& token);
+        
+        std::shared_ptr<ASTNode> parseExpression();
+        std::shared_ptr<ASTNode> parsePrimary();
+        std::vector<std::shared_ptr<ASTNode>> parseArguments();
+        
+        // Shunting Yard Algorithm
+        std::vector<Token> infixToPostfix();
+        std::shared_ptr<ASTNode> buildASTFromPostfix(const std::vector<Token>& postfix);
+        
+    public:
+        std::vector<Token> postfixTokens;      // For debugging/display
+        std::vector<std::string> operatorStack; // For debugging/display
+        
+        Parser(const std::vector<Token>& tokens);
+        std::shared_ptr<ASTNode> parse();  // Main entry point
+    };
+    
+    SHUNTING YARD ALGORITHM:
+    - Invented by Edsger Dijkstra
+    - Converts infix notation to postfix (Reverse Polish Notation)
+    - Makes expression evaluation straightforward
+    
+    NOTATION EXAMPLES:
+    Infix:    2 + 3 * 4       (human-readable)
+    Postfix:  2 3 4 * +       (computer-friendly)
+    Prefix:   + 2 * 3 4       (LISP-style)
+    
+    WHY POSTFIX:
+    - No parentheses needed
+    - No operator precedence ambiguity
+    - Easy stack-based evaluation
+
+
+--------------------------------------------------------------------------------
+                            2.5 PARSER.CPP
+--------------------------------------------------------------------------------
+
+PURPOSE: Implements the parser - converts tokens to AST using Shunting Yard
+
+Lines 1-25: Basic Helper Methods
+    Parser::Parser(const std::vector<Token>& tokens) : tokens(tokens), position(0) {}
+    
+    Token Parser::currentToken() {
+        if (position >= tokens.size()) {
+            return Token(TokenType::END, "");
+        }
+        return tokens[position];
+    }
+    
+    Token Parser::peek(int offset) {
+        size_t pos = position + offset;
+        if (pos >= tokens.size()) {
+            return Token(TokenType::END, "");
+        }
+        return tokens[pos];
+    }
+    
+    void Parser::advance() {
+        position++;
+    }
+    
+    bool Parser::isOperator(const Token& token) {
+        return token.type == TokenType::PLUS ||
+               token.type == TokenType::MINUS ||
+               token.type == TokenType::MULTIPLY ||
+               token.type == TokenType::DIVIDE ||
+               token.type == TokenType::MODULO ||
+               token.type == TokenType::POWER ||
+               token.type == TokenType::FACTORIAL;
+    }
+    
+    bool Parser::isFunction(const Token& token) {
+        return token.type == TokenType::FUNCTION;
+    }
+
+Lines 39-134: Shunting Yard Algorithm - Infix to Postfix
+    std::vector<Token> Parser::infixToPostfix() {
+        std::vector<Token> output;        // Output queue
+        std::stack<Token> opStack;         // Operator stack
+        operatorStack.clear();
+        
+        position = 0;
+        bool expectOperand = true;  // Track if we expect number/variable or operator
+        
+        while (currentToken().type != TokenType::END) {
+            Token token = currentToken();
+            
+            // CASE 1: Numbers and Constants -> Direct to output
+            if (token.type == TokenType::NUMBER || token.type == TokenType::CONSTANT) {
+                output.push_back(token);
+                expectOperand = false;
+                advance();
+            }
+            
+            // CASE 2: Variables -> Direct to output
+            else if (token.type == TokenType::VARIABLE) {
+                output.push_back(token);
+                expectOperand = false;
+                advance();
+            }
+            
+            // CASE 3: Functions -> Push to operator stack
+            else if (token.type == TokenType::FUNCTION) {
+                opStack.push(token);
+                operatorStack.push_back(token.value);
+                advance();
+            }
+            
+            // CASE 4: Comma -> Pop operators until left paren
+            else if (token.type == TokenType::COMMA) {
+                while (!opStack.empty() && opStack.top().type != TokenType::LPAREN) {
+                    output.push_back(opStack.top());
+                    opStack.pop();
+                }
+                advance();
+            }
+            
+            // CASE 5: Unary Minus (minus at start or after operator)
+            else if (token.type == TokenType::MINUS && expectOperand) {
+                Token unaryMinus(TokenType::FUNCTION, "neg");
+                opStack.push(unaryMinus);
+                operatorStack.push_back("neg");
+                advance();
+            }
+            
+            // CASE 6: Binary Operators -> Apply precedence rules
+            else if (isOperator(token)) {
+                while (!opStack.empty() && isOperator(opStack.top())) {
+                    Token top = opStack.top();
+                    
+                    // Pop if higher precedence (or equal and left-associative)
+                    if ((token.rightAssociative && token.precedence < top.precedence) ||
+                        (!token.rightAssociative && token.precedence <= top.precedence)) {
+                        output.push_back(top);
+                        opStack.pop();
+                    } else {
+                        break;
+                    }
+                }
+                opStack.push(token);
+                operatorStack.push_back(token.value);
+                expectOperand = true;
+                advance();
+            }
+            
+            // CASE 7: Left Parenthesis -> Push to stack
+            else if (token.type == TokenType::LPAREN) {
+                opStack.push(token);
+                expectOperand = true;
+                advance();
+            }
+            
+            // CASE 8: Right Parenthesis -> Pop until matching left paren
+            else if (token.type == TokenType::RPAREN) {
+                while (!opStack.empty() && opStack.top().type != TokenType::LPAREN) {
+                    output.push_back(opStack.top());
+                    opStack.pop();
+                }
+                if (!opStack.empty() && opStack.top().type == TokenType::LPAREN) {
+                    opStack.pop();  // Remove left paren
+                }
+                // If there's a function token, pop it too
+                if (!opStack.empty() && opStack.top().type == TokenType::FUNCTION) {
+                    output.push_back(opStack.top());
+                    opStack.pop();
+                }
+                expectOperand = false;
+                advance();
+            }
+            else {
+                advance();  // Skip unknown tokens
+            }
+        }
+        
+        // Pop remaining operators
+        while (!opStack.empty()) {
+            if (opStack.top().type == TokenType::LPAREN || 
+                opStack.top().type == TokenType::RPAREN) {
+                throw std::runtime_error("Mismatched parentheses");
+            }
+            output.push_back(opStack.top());
+            opStack.pop();
+        }
+        
+        postfixTokens = output;
+        return output;
+    }
+    
+    ALGORITHM WALKTHROUGH: "2 + 3 * 4"
+    
+    Step 1: Token=2 (NUMBER)
+        Output: [2]
+        Stack: []
+    
+    Step 2: Token=+ (PLUS, precedence=1)
+        Output: [2]
+        Stack: [+]
+    
+    Step 3: Token=3 (NUMBER)
+        Output: [2, 3]
+        Stack: [+]
+    
+    Step 4: Token=* (MULTIPLY, precedence=2)
+        Stack top is +, precedence 1 < 2, don't pop
+        Output: [2, 3]
+        Stack: [+, *]
+    
+    Step 5: Token=4 (NUMBER)
+        Output: [2, 3, 4]
+        Stack: [+, *]
+    
+    Step 6: END - Pop all operators
+        Output: [2, 3, 4, *, +]
+        Stack: []
+    
+    Result: "2 3 4 * +"
+    
+    FACULTY Q: "Why does this work?"
+    ANSWER: "Higher precedence operators are pushed on stack and popped first,
+            so they appear later in postfix (evaluated first in stack evaluation).
+            The * appears before + in postfix, so 3*4 is calculated before adding 2."
+
+Lines 136-247: Build AST from Postfix
+    std::shared_ptr<ASTNode> Parser::buildASTFromPostfix(const std::vector<Token>& postfix) {
+        std::stack<std::shared_ptr<ASTNode>> nodeStack;
+        
+        for (const Token& token : postfix) {
+            if (token.type == TokenType::NUMBER) {
+                nodeStack.push(std::make_shared<NumberNode>(token.numValue));
+            }
+            else if (token.type == TokenType::CONSTANT) {
+                nodeStack.push(std::make_shared<NumberNode>(token.numValue));
+            }
+            else if (token.type == TokenType::VARIABLE) {
+                nodeStack.push(std::make_shared<VariableNode>(token.value));
+            }
+            else if (token.type == TokenType::FUNCTION) {
+                // Handle special multi-argument functions
+                if (token.value == "diff") {
+                    if (nodeStack.size() < 3) {
+                        throw std::runtime_error("diff requires 3 arguments");
+                    }
+                    auto point = nodeStack.top(); nodeStack.pop();
+                    auto var = nodeStack.top(); nodeStack.pop();
+                    auto expr = nodeStack.top(); nodeStack.pop();
+                    
+                    if (var->type != ASTNodeType::VARIABLE) {
+                        throw std::runtime_error("diff second argument must be a variable");
+                    }
+                    
+                    auto varNode = std::dynamic_pointer_cast<VariableNode>(var);
+                    
+                    // Evaluate point expression to get numeric value
+                    Evaluator evalPoint;
+                    double pointValue = evalPoint.evaluate(point);
+                    
+                    nodeStack.push(std::make_shared<DiffNode>(
+                        expr, varNode->name, pointValue));
+                }
+                else if (token.value == "integrate") {
+                    if (nodeStack.size() < 4) {
+                        throw std::runtime_error("integrate requires 4 arguments");
+                    }
+                    auto upper = nodeStack.top(); nodeStack.pop();
+                    auto lower = nodeStack.top(); nodeStack.pop();
+                    auto var = nodeStack.top(); nodeStack.pop();
+                    auto expr = nodeStack.top(); nodeStack.pop();
+                    
+                    if (var->type != ASTNodeType::VARIABLE) {
+                        throw std::runtime_error("integrate second argument must be a variable");
+                    }
+                    
+                    auto varNode = std::dynamic_pointer_cast<VariableNode>(var);
+                    
+                    // Evaluate bound expressions
+                    Evaluator evalBounds;
+                    double lowerValue = evalBounds.evaluate(lower);
+                    double upperValue = evalBounds.evaluate(upper);
+                    
+                    nodeStack.push(std::make_shared<IntegrateNode>(
+                        expr, varNode->name, lowerValue, upperValue));
+                }
+                else if (token.value == "nCr") {
+                    if (nodeStack.size() < 2) {
+                        throw std::runtime_error("nCr requires 2 arguments");
+                    }
+                    auto r = nodeStack.top(); nodeStack.pop();
+                    auto n = nodeStack.top(); nodeStack.pop();
+                    
+                    nodeStack.push(std::make_shared<NCrNode>(n, r));
+                }
+                else if (token.value == "nPr") {
+                    if (nodeStack.size() < 2) {
+                        throw std::runtime_error("nPr requires 2 arguments");
+                    }
+                    auto r = nodeStack.top(); nodeStack.pop();
+                    auto n = nodeStack.top(); nodeStack.pop();
+                    
+                    nodeStack.push(std::make_shared<NPrNode>(n, r));
+                }
+                else if (token.value == "neg") {
+                    if (nodeStack.empty()) {
+                        throw std::runtime_error("Unary minus requires an operand");
+                    }
+                    auto operand = nodeStack.top();
+                    nodeStack.pop();
+                    nodeStack.push(std::make_shared<UnaryOpNode>("neg", operand));
+                }
+                else {
+                    // Regular single-argument function
+                    if (nodeStack.empty()) {
+                        throw std::runtime_error("Function requires an argument");
+                    }
+                    auto arg = nodeStack.top();
+                    nodeStack.pop();
+                    
+                    auto funcNode = std::make_shared<FunctionCallNode>(token.value);
+                    funcNode->arguments.push_back(arg);
+                    nodeStack.push(funcNode);
+                }
+            }
+            else if (token.type == TokenType::FACTORIAL) {
+                if (nodeStack.empty()) {
+                    throw std::runtime_error("Factorial requires an operand");
+                }
+                auto operand = nodeStack.top();
+                nodeStack.pop();
+                nodeStack.push(std::make_shared<FactorialNode>(operand));
+            }
+            else if (isOperator(token)) {
+                if (nodeStack.size() < 2) {
+                    throw std::runtime_error("Binary operator requires two operands");
+                }
+                auto right = nodeStack.top(); nodeStack.pop();
+                auto left = nodeStack.top(); nodeStack.pop();
+                
+                nodeStack.push(std::make_shared<BinaryOpNode>(
+                    token.value, left, right));
+            }
+        }
+        
+        if (nodeStack.size() != 1) {
+            throw std::runtime_error("Invalid expression");
+        }
+        
+        return nodeStack.top();
+    }
+    
+    AST BUILDING WALKTHROUGH: Postfix "2 3 4 * +"
+    
+    Step 1: Token=2 (NUMBER)
+        Stack: [NumberNode(2)]
+    
+    Step 2: Token=3 (NUMBER)
+        Stack: [NumberNode(2), NumberNode(3)]
+    
+    Step 3: Token=4 (NUMBER)
+        Stack: [NumberNode(2), NumberNode(3), NumberNode(4)]
+    
+    Step 4: Token=* (MULTIPLY)
+        Pop: right=NumberNode(4), left=NumberNode(3)
+        Create: BinaryOpNode("*", NumberNode(3), NumberNode(4))
+        Stack: [NumberNode(2), BinaryOpNode(*)]
+    
+    Step 5: Token=+ (PLUS)
+        Pop: right=BinaryOpNode(*), left=NumberNode(2)
+        Create: BinaryOpNode("+", NumberNode(2), BinaryOpNode(*))
+        Stack: [BinaryOpNode(+)]
+    
+    Final AST:
+           +
+          / \
+         2   *
+            / \
+           3   4
+    
+    FACULTY Q: "How does postfix guarantee correct tree structure?"
+    ANSWER: "In postfix, operators come after their operands. When we see an operator,
+            the last 2 items on stack are guaranteed to be its operands (for binary ops).
+            This naturally builds the tree bottom-up, respecting precedence."
+
+Lines 257-266: Main Parse Method
+    std::shared_ptr<ASTNode> Parser::parse() {
+        std::vector<Token> postfix = infixToPostfix();
+        return buildASTFromPostfix(postfix);
+    }
+    
+    TWO-PHASE PARSING:
+    Phase 1: Infix -> Postfix (handles precedence and parentheses)
+    Phase 2: Postfix -> AST (builds tree structure)
+
+
+--------------------------------------------------------------------------------
+                            2.6 EVALUATOR.H
+--------------------------------------------------------------------------------
+
+PURPOSE: Defines the Evaluator class for expression evaluation and code generation
+
+Lines 1-32: Evaluator Class
+    class Evaluator {
+    private:
+        std::unordered_map<std::string, double> variables;  // Variable storage
+        std::vector<std::string> intermediateCode;           // 3-address code
+        int tempCounter;                                     // Temporary variable counter
+        
+        double evaluateNode(std::shared_ptr<ASTNode> node);
+        std::string newTemp();
+        
+    public:
+        Evaluator();
+        
+        void setVariable(const std::string& name, double value);
+        double getVariable(const std::string& name);
+        bool hasVariable(const std::string& name);
+        
+        double evaluate(std::shared_ptr<ASTNode> ast);
+        std::string generateIntermediateCode(std::shared_ptr<ASTNode> node);
+        std::vector<std::string> getIntermediateCode();
+        void clearIntermediateCode();
+        
+        static double factorial(double n);
+    };
+    
+    INTERMEDIATE CODE:
+    - Three-address code: each instruction has at most 3 addresses
+    - Format: result = operand1 operator operand2
+    - Example: t0 = a + b
+    
+    WHY GENERATE INTERMEDIATE CODE:
+    - Step toward machine code
+    - Easier optimization
+    - Platform-independent representation
+
+
+--------------------------------------------------------------------------------
+                            2.7 EVALUATOR.CPP
+--------------------------------------------------------------------------------
+
+PURPOSE: Implements expression evaluation and intermediate code generation
+
+Lines 1-40: Basic Methods
+    Evaluator::Evaluator() : tempCounter(0) {}
+    
+    void Evaluator::setVariable(const std::string& name, double value) {
+        variables[name] = value;
+    }
+    
+    double Evaluator::getVariable(const std::string& name) {
+        if (variables.find(name) == variables.end()) {
+            throw std::runtime_error("Undefined variable: " + name);
+        }
+        return variables[name];
+    }
+    
+    bool Evaluator::hasVariable(const std::string& name) {
+        return variables.find(name) != variables.end();
+    }
+    
+    std::string Evaluator::newTemp() {
+        return "t" + std::to_string(tempCounter++);
+    }
+    
+    double Evaluator::factorial(double n) {
+        if (n < 0 || n != std::floor(n)) {
+            throw std::runtime_error("Factorial requires non-negative integer");
+        }
+        if (n > 170) {
+            throw std::runtime_error("Factorial overflow");
+        }
+        double result = 1.0;
+        for (int i = 2; i <= static_cast<int>(n); i++) {
+            result *= i;
+        }
+        return result;
+    }
+    
+    FACTORIAL ALGORITHM:
+    Iterative (not recursive) for efficiency
+    
+    Example: 5!
+    result = 1
+    i=2: result = 1 * 2 = 2
+    i=3: result = 2 * 3 = 6
+    i=4: result = 6 * 4 = 24
+    i=5: result = 24 * 5 = 120
+    
+    WHY LIMIT TO 170:
+    171! ≈ 1.24 × 10^309 exceeds double precision (max ≈ 1.8 × 10^308)
+
+Lines 42-180: Intermediate Code Generation
+    std::string Evaluator::generateIntermediateCode(std::shared_ptr<ASTNode> node) {
+        std::ostringstream code;
+        
+        switch (node->type) {
+            case ASTNodeType::NUMBER: {
+                auto numNode = std::dynamic_pointer_cast<NumberNode>(node);
+                std::string temp = newTemp();
+                code << temp << " = " << numNode->value;
+                intermediateCode.push_back(code.str());
+                return temp;
+            }
+            
+            case ASTNodeType::VARIABLE: {
+                auto varNode = std::dynamic_pointer_cast<VariableNode>(node);
+                std::string temp = newTemp();
+                code << temp << " = " << varNode->name;
+                intermediateCode.push_back(code.str());
+                return temp;
+            }
+            
+            case ASTNodeType::BINARY_OP: {
+                auto binNode = std::dynamic_pointer_cast<BinaryOpNode>(node);
+                std::string left = generateIntermediateCode(binNode->left);
+                std::string right = generateIntermediateCode(binNode->right);
+                std::string temp = newTemp();
+                code << temp << " = " << left << " " << binNode->op << " " << right;
+                intermediateCode.push_back(code.str());
+                return temp;
+            }
+            
+            case ASTNodeType::FACTORIAL: {
+                auto factNode = std::dynamic_pointer_cast<FactorialNode>(node);
+                std::string operand = generateIntermediateCode(factNode->operand);
+                std::string temp = newTemp();
+                code << temp << " = fact " << operand;
+                intermediateCode.push_back(code.str());
+                return temp;
+            }
+            
+            case ASTNodeType::NCR: {
+                auto ncrNode = std::dynamic_pointer_cast<NCrNode>(node);
+                std::string n = generateIntermediateCode(ncrNode->n);
+                std::string r = generateIntermediateCode(ncrNode->r);
+                
+                // nCr(n, r) = n! / (r! * (n-r)!)
+                // Generate: t_fact_n = fact n
+                std::string factN = newTemp();
+                intermediateCode.push_back(factN + " = fact " + n);
+                
+                // Generate: t_fact_r = fact r
+                std::string factR = newTemp();
+                intermediateCode.push_back(factR + " = fact " + r);
+                
+                // Generate: t_n_minus_r = n - r
+                std::string nMinusR = newTemp();
+                intermediateCode.push_back(nMinusR + " = " + n + " - " + r);
+                
+                // Generate: t_fact_n_minus_r = fact (n-r)
+                std::string factNMinusR = newTemp();
+                intermediateCode.push_back(factNMinusR + " = fact " + nMinusR);
+                
+                // Generate: t_denom = t_fact_r * t_fact_n_minus_r
+                std::string denom = newTemp();
+                intermediateCode.push_back(denom + " = " + factR + " * " + factNMinusR);
+                
+                // Generate: t_result = t_fact_n / t_denom
+                std::string temp = newTemp();
+                intermediateCode.push_back(temp + " = " + factN + " / " + denom);
+                
+                return temp;
+            }
+            
+            case ASTNodeType::NPR: {
+                auto nprNode = std::dynamic_pointer_cast<NPrNode>(node);
+                std::string n = generateIntermediateCode(nprNode->n);
+                std::string r = generateIntermediateCode(nprNode->r);
+                
+                // nPr(n, r) = n! / (n-r)!
+                // Generate: t_fact_n = fact n
+                std::string factN = newTemp();
+                intermediateCode.push_back(factN + " = fact " + n);
+                
+                // Generate: t_n_minus_r = n - r
+                std::string nMinusR = newTemp();
+                intermediateCode.push_back(nMinusR + " = " + n + " - " + r);
+                
+                // Generate: t_fact_n_minus_r = fact (n-r)
+                std::string factNMinusR = newTemp();
+                intermediateCode.push_back(factNMinusR + " = fact " + nMinusR);
+                
+                // Generate: t_result = t_fact_n / t_fact_n_minus_r
+                std::string temp = newTemp();
+                intermediateCode.push_back(temp + " = " + factN + " / " + factNMinusR);
+                
+                return temp;
+            }
+        }
+    }
+    
+    INTERMEDIATE CODE EXAMPLE: "nCr(5, 2)"
+    
+    t0 = 5           // Load n
+    t1 = 2           // Load r
+    t2 = fact t0     // 5! = 120
+    t3 = fact t1     // 2! = 2
+    t4 = t0 - t1     // 5 - 2 = 3
+    t5 = fact t4     // 3! = 6
+    t6 = t3 * t5     // 2 * 6 = 12
+    t7 = t2 / t6     // 120 / 12 = 10
+    
+    FACULTY Q: "Why break nCr into so many steps?"
+    ANSWER: "Three-address code simplifies code generation and optimization. Each step
+            is atomic and can be directly translated to assembly. Also makes it easier
+            to detect common subexpressions and optimize."
+
+Lines 182-353: Runtime Evaluation
+    double Evaluator::evaluateNode(std::shared_ptr<ASTNode> node) {
+        switch (node->type) {
+            case ASTNodeType::NUMBER: {
+                auto numNode = std::dynamic_pointer_cast<NumberNode>(node);
+                return numNode->value;
+            }
+            
+            case ASTNodeType::VARIABLE: {
+                auto varNode = std::dynamic_pointer_cast<VariableNode>(node);
+                return getVariable(varNode->name);
+            }
+            
+            case ASTNodeType::BINARY_OP: {
+                auto binNode = std::dynamic_pointer_cast<BinaryOpNode>(node);
+                double left = evaluateNode(binNode->left);
+                double right = evaluateNode(binNode->right);
+                
+                if (binNode->op == "+") return left + right;
+                if (binNode->op == "-") return left - right;
+                if (binNode->op == "*") return left * right;
+                if (binNode->op == "/") {
+                    if (right == 0.0) throw std::runtime_error("Division by zero");
+                    return left / right;
+                }
+                if (binNode->op == "%") {
+                    if (right == 0.0) throw std::runtime_error("Modulo by zero");
+                    return std::fmod(left, right);
+                }
+                if (binNode->op == "^") return std::pow(left, right);
+                
+                throw std::runtime_error("Unknown operator");
+            }
+            
+            case ASTNodeType::UNARY_OP: {
+                auto unaryNode = std::dynamic_pointer_cast<UnaryOpNode>(node);
+                double operand = evaluateNode(unaryNode->operand);
+                
+                if (unaryNode->op == "neg") return -operand;
+                
+                throw std::runtime_error("Unknown unary operator");
+            }
+            
+            case ASTNodeType::FUNCTION_CALL: {
+                auto funcNode = std::dynamic_pointer_cast<FunctionCallNode>(node);
+                double arg = evaluateNode(funcNode->arguments[0]);
+                
+                if (funcNode->name == "sin") return std::sin(arg);
+                if (funcNode->name == "cos") return std::cos(arg);
+                if (funcNode->name == "tan") return std::tan(arg);
+                if (funcNode->name == "asin") return std::asin(arg);
+                if (funcNode->name == "acos") return std::acos(arg);
+                if (funcNode->name == "atan") return std::atan(arg);
+                if (funcNode->name == "log") return std::log10(arg);
+                if (funcNode->name == "ln") return std::log(arg);
+                if (funcNode->name == "exp") return std::exp(arg);
+                if (funcNode->name == "sqrt") return std::sqrt(arg);
+                if (funcNode->name == "cbrt") return std::cbrt(arg);
+                if (funcNode->name == "abs") return std::abs(arg);
+                
+                throw std::runtime_error("Unknown function");
+            }
+            
+            case ASTNodeType::FACTORIAL: {
+                auto factNode = std::dynamic_pointer_cast<FactorialNode>(node);
+                double operand = evaluateNode(factNode->operand);
+                return factorial(operand);
+            }
+            
+            case ASTNodeType::NCR: {
+                auto ncrNode = std::dynamic_pointer_cast<NCrNode>(node);
+                double n = evaluateNode(ncrNode->n);
+                double r = evaluateNode(ncrNode->r);
+                
+                // Validation
+                if (n < 0 || r < 0) {
+                    throw std::runtime_error("nCr requires non-negative integers");
+                }
+                if (n != std::floor(n) || r != std::floor(r)) {
+                    throw std::runtime_error("nCr requires integer arguments");
+                }
+                if (r > n) {
+                    throw std::runtime_error("nCr requires r <= n");
+                }
+                
+                // Calculate: nCr = n! / (r! * (n-r)!)
+                return factorial(n) / (factorial(r) * factorial(n - r));
+            }
+            
+            case ASTNodeType::NPR: {
+                auto nprNode = std::dynamic_pointer_cast<NPrNode>(node);
+                double n = evaluateNode(nprNode->n);
+                double r = evaluateNode(nprNode->r);
+                
+                // Validation
+                if (n < 0 || r < 0) {
+                    throw std::runtime_error("nPr requires non-negative integers");
+                }
+                if (n != std::floor(n) || r != std::floor(r)) {
+                    throw std::runtime_error("nPr requires integer arguments");
+                }
+                if (r > n) {
+                    throw std::runtime_error("nPr requires r <= n");
+                }
+                
+                // Calculate: nPr = n! / (n-r)!
+                return factorial(n) / factorial(n - r);
+            }
+            
+            case ASTNodeType::DIFF_NODE: {
+                auto diffNode = std::dynamic_pointer_cast<DiffNode>(node);
+                std::vector<CalculusStep> steps;
+                return Calculus::differentiate(
+                    diffNode->expression, 
+                    diffNode->variable, 
+                    diffNode->point, 
+                    this, 
+                    steps
+                );
+            }
+            
+            case ASTNodeType::INTEGRATE_NODE: {
+                auto intNode = std::dynamic_pointer_cast<IntegrateNode>(node);
+                std::vector<CalculusStep> steps;
+                return Calculus::integrateTrapezoid(
+                    intNode->expression, 
+                    intNode->variable, 
+                    intNode->lowerBound, 
+                    intNode->upperBound, 
+                    this, 
+                    steps
+                );
+            }
+        }
+        
+        throw std::runtime_error("Unknown node type");
+    }
+    
+    double Evaluator::evaluate(std::shared_ptr<ASTNode> ast) {
+        return evaluateNode(ast);
+    }
+    
+    SEMANTIC VALIDATION (nCr/nPr):
+    1. Non-negative check: n >= 0 and r >= 0
+    2. Integer check: n and r are whole numbers
+    3. Range check: r <= n (can't choose more items than available)
+    
+    FACULTY Q: "Why validate at runtime, not parse time?"
+    ANSWER: "Arguments might be expressions, not just numbers. Example: nCr(x+2, y-1)
+            can't be validated until we know values of x and y."
+
+
+--------------------------------------------------------------------------------
+                            2.8 MAIN.CPP
+--------------------------------------------------------------------------------
+
+PURPOSE: Entry point - coordinates all components and generates JSON output
+
+Lines 1-11: Includes
+    #include <iostream>
+    #include <string>
+    #include <vector>
+    #include <memory>
+    #include <sstream>
+    #include "lexer.h"
+    #include "parser.h"
+    #include "ast.h"
+    #include "evaluator.h"
+    #include "calculus.h"
+
+Lines 13-23: JSON Escaping
+    std::string escapeJSON(const std::string& str) {
+        std::string result;
+        for (char c : str) {
+            switch (c) {
+                case '"': result += "\\\""; break;     // Quote
+                case '\\': result += "\\\\"; break;    // Backslash
+                case '\n': result += "\\n"; break;     // Newline
+                case '\r': result += "\\r"; break;     // Carriage return
+                case '\t': result += "\\t"; break;     // Tab
+                default: result += c;
+            }
+        }
+        return result;
+    }
+    
+    WHY ESCAPE: JSON is text format. Special characters must be escaped.
+    Example: String 'say "hello"' becomes "say \"hello\"" in JSON
+
+Lines 25-39: Tokens to JSON
+    std::string tokensToJSON(const std::vector<Token>& tokens) {
+        std::ostringstream json;
+        json << "[";
+        for (size_t i = 0; i < tokens.size(); i++) {
+            if (i > 0) json << ",";
+            json << "{\"type\":\"" << Lexer::tokenTypeToString(tokens[i].type) << "\",";
+            json << "\"value\":\"" << escapeJSON(tokens[i].value) << "\"";
+            if (tokens[i].type == TokenType::NUMBER || tokens[i].type == TokenType::CONSTANT) {
+                json << ",\"numValue\":" << tokens[i].numValue;
+            }
+            json << "}";
+        }
+        json << "]";
+        return json.str();
+    }
+    
+    EXAMPLE OUTPUT:
+    [
+        {"type":"NUMBER","value":"2","numValue":2},
+        {"type":"PLUS","value":"+"},
+        {"type":"NUMBER","value":"3","numValue":3}
+    ]
+
+Lines 41-128: AST to JSON
+    std::string astToJSON(std::shared_ptr<ASTNode> node) {
+        if (!node) return "null";
+        
+        std::ostringstream json;
+        json << "{";
+        
+        switch (node->type) {
+            case ASTNodeType::NUMBER: {
+                auto numNode = std::dynamic_pointer_cast<NumberNode>(node);
+                json << "\"type\":\"NUMBER\",\"value\":" << numNode->value;
+                break;
+            }
+            case ASTNodeType::VARIABLE: {
+                auto varNode = std::dynamic_pointer_cast<VariableNode>(node);
+                json << "\"type\":\"VARIABLE\",\"name\":\"" << varNode->name << "\"";
+                break;
+            }
+            case ASTNodeType::BINARY_OP: {
+                auto binNode = std::dynamic_pointer_cast<BinaryOpNode>(node);
+                json << "\"type\":\"BINARY_OP\",\"op\":\"" << escapeJSON(binNode->op) << "\",";
+                json << "\"left\":" << astToJSON(binNode->left) << ",";
+                json << "\"right\":" << astToJSON(binNode->right);
+                break;
+            }
+            case ASTNodeType::FACTORIAL: {
+                auto factNode = std::dynamic_pointer_cast<FactorialNode>(node);
+                json << "\"type\":\"FACTORIAL\",";
+                json << "\"operand\":" << astToJSON(factNode->operand);
+                break;
+            }
+            case ASTNodeType::NCR: {
+                auto ncrNode = std::dynamic_pointer_cast<NCrNode>(node);
+                json << "\"type\":\"NCR\",";
+                json << "\"n\":" << astToJSON(ncrNode->n) << ",";
+                json << "\"r\":" << astToJSON(ncrNode->r);
+                break;
+            }
+            case ASTNodeType::NPR: {
+                auto nprNode = std::dynamic_pointer_cast<NPrNode>(node);
+                json << "\"type\":\"NPR\",";
+                json << "\"n\":" << astToJSON(nprNode->n) << ",";
+                json << "\"r\":" << astToJSON(nprNode->r);
+                break;
+            }
+        }
+        
+        json << "}";
+        return json.str();
+    }
+    
+    RECURSIVE SERIALIZATION:
+    For tree nodes (BINARY_OP, NCR, etc.), recursively call astToJSON on children
+    
+    EXAMPLE OUTPUT for "nCr(5, 2)":
+    {
+        "type":"NCR",
+        "n":{"type":"NUMBER","value":5},
+        "r":{"type":"NUMBER","value":2}
+    }
+
+Lines 169-250: Main Function
+    int main(int argc, char* argv[]) {
+        try {
+            // Get input expression
+            std::string expression;
+            if (argc > 1) {
+                expression = argv[1];          // From command line
+            } else {
+                std::getline(std::cin, expression);  // From stdin
+            }
+            
+            if (expression.empty()) {
+                std::cerr << "{\"error\":\"Empty expression\"}" << std::endl;
+                return 1;
+            }
+            
+            // Step 1: Lexical Analysis
+            Lexer lexer(expression);
+            std::vector<Token> tokens = lexer.tokenize();
+            
+            // Step 2: Parsing
+            Parser parser(tokens);
+            std::shared_ptr<ASTNode> ast = parser.parse();
+            
+            // Step 3: Intermediate Code Generation
+            Evaluator evaluator;
+            evaluator.clearIntermediateCode();
+            evaluator.generateIntermediateCode(ast);
+            std::vector<std::string> intermediateCode = evaluator.getIntermediateCode();
+            
+            // Step 4: Evaluation
+            double result = evaluator.evaluate(ast);
+            
+            // Step 5: Check for calculus operations
+            std::vector<CalculusStep> calculusSteps;
+            std::string calculusType = "none";
+            
+            if (ast->type == ASTNodeType::DIFF_NODE) {
+                auto diffNode = std::dynamic_pointer_cast<DiffNode>(ast);
+                calculusType = "differentiation";
+                Calculus::differentiate(
+                    diffNode->expression, 
+                    diffNode->variable, 
+                    diffNode->point, 
+                    &evaluator, 
+                    calculusSteps
+                );
+            } else if (ast->type == ASTNodeType::INTEGRATE_NODE) {
+                auto intNode = std::dynamic_pointer_cast<IntegrateNode>(ast);
+                calculusType = "integration";
+                Calculus::integrateTrapezoid(
+                    intNode->expression, 
+                    intNode->variable, 
+                    intNode->lowerBound, 
+                    intNode->upperBound, 
+                    &evaluator, 
+                    calculusSteps
+                );
+            }
+            
+            // Step 6: Generate JSON output
+            std::cout << "{";
+            std::cout << "\"success\":true,";
+            std::cout << "\"expression\":\"" << escapeJSON(expression) << "\",";
+            std::cout << "\"tokens\":" << tokensToJSON(tokens) << ",";
+            std::cout << "\"postfix\":" << tokensToJSON(parser.postfixTokens) << ",";
+            std::cout << "\"operatorStack\":[";
+            for (size_t i = 0; i < parser.operatorStack.size(); i++) {
+                if (i > 0) std::cout << ",";
+                std::cout << "\"" << escapeJSON(parser.operatorStack[i]) << "\"";
+            }
+            std::cout << "],";
+            std::cout << "\"ast\":" << astToJSON(ast) << ",";
+            std::cout << "\"intermediateCode\":" << intermediateCodeToJSON(intermediateCode) << ",";
+            std::cout << "\"result\":" << result << ",";
+            std::cout << "\"calculusType\":\"" << calculusType << "\",";
+            std::cout << "\"calculusSteps\":" << calculusStepsToJSON(calculusSteps);
+            std::cout << "}" << std::endl;
+            
+            return 0;
+            
+        } catch (const std::exception& e) {
+            std::cerr << "{\"success\":false,\"error\":\"" << escapeJSON(e.what()) << "\"}" << std::endl;
+            return 1;
+        }
+    }
+    
+    COMPLETE PIPELINE EXAMPLE: Input "5!"
+    
+    1. Lexer: [NUMBER(5), FACTORIAL, END]
+    2. Parser (Shunting Yard): [5, !] (postfix)
+    3. Parser (Build AST): FactorialNode(NumberNode(5))
+    4. Intermediate Code:
+       t0 = 5
+       t1 = fact t0
+    5. Evaluation: factorial(5) = 120
+    6. JSON Output:
+       {
+           "success": true,
+           "expression": "5!",
+           "tokens": [{"type":"NUMBER","value":"5","numValue":5}, {"type":"FACTORIAL","value":"!"}],
+           "postfix": [{"type":"NUMBER","value":"5","numValue":5}, {"type":"FACTORIAL","value":"!"}],
+           "ast": {"type":"FACTORIAL","operand":{"type":"NUMBER","value":5}},
+           "intermediateCode": ["t0 = 5", "t1 = fact t0"],
+           "result": 120,
+           "calculusType": "none",
+           "calculusSteps": []
+       }
+
+
+================================================================================
+                    3. BACKEND COMPONENTS (Python)
+================================================================================
+
+--------------------------------------------------------------------------------
+                            3.1 APP.PY
+--------------------------------------------------------------------------------
+
+PURPOSE: Flask REST API server - interface between frontend and C++ compiler
+
+Lines 1-9: Imports and Setup
+    from flask import Flask, request, jsonify, send_from_directory
+    from flask_cors import CORS
+    import subprocess
+    import json
+    import os
+    import sys
+    from object_analyzer import ObjectFileAnalyzer
+    
+    app = Flask(__name__, static_folder='../frontend')
+    CORS(app)
+    
+    FLASK: Micro web framework for Python
+    CORS: Cross-Origin Resource Sharing - allows frontend to call backend from different ports
+    
+    WHY CORS: Frontend runs on one port (e.g., 5000 when opened in browser),
+              Backend API on another. Browsers block cross-origin requests by default.
+    
+    static_folder: Where Flask serves static files (HTML, CSS, JS)
+
+Lines 11-16: Compiler Path Setup
+    COMPILER_PATH = os.path.join(os.path.dirname(__file__), '..', 'compiler', 'compiler.exe')
+    if not os.path.exists(COMPILER_PATH):
+        COMPILER_PATH = os.path.join(os.path.dirname(__file__), '..', 'compiler', 'compiler')
+    
+    WHY TWO PATHS: Windows uses .exe extension, Linux/Mac don't
+    __file__: Path to current Python file (app.py)
+    os.path.join: Platform-independent path joining
+
+Lines 18-32: Static File Routes
+    @app.route('/')
+    def index():
+        """Serve the main HTML page"""
+        return send_from_directory(app.static_folder, 'index.html')
+    
+    @app.route('/js/<path:filename>')
+    def serve_js(filename):
+        """Serve JavaScript files"""
+        return send_from_directory(os.path.join(app.static_folder, 'js'), filename)
+    
+    @app.route('/css/<path:filename>')
+    def serve_css(filename):
+        """Serve CSS files"""
+        return send_from_directory(os.path.join(app.static_folder, 'css'), filename)
+    
+    @app.route: Decorator that registers URL patterns
+    '<path:filename>': Dynamic URL segment - captures any path
+    
+    EXAMPLE: GET /js/app.js -> serve_js('app.js') -> returns frontend/js/app.js
+
+Lines 34-100: Compile Expression Endpoint
+    @app.route('/api/compile', methods=['POST'])
+    def compile_expression():
+        """
+        Endpoint to compile and evaluate mathematical expressions
+        
+        Expected JSON input:
+        {
+            "expression": "sin(pi/4) + cos(pi/4)"
+        }
+        
+        Returns:
+        {
+            "success": true,
+            "expression": "...",
+            "tokens": [...],
+            "postfix": [...],
+            "ast": {...},
+            "intermediateCode": [...],
+            "result": 1.414...,
+            "calculusType": "none|differentiation|integration",
+            "calculusSteps": [...]
+        }
+        """
+        try:
+            data = request.get_json()
+            
+            if not data or 'expression' not in data:
+                return jsonify({
+                    'success': False,
+                    'error': 'No expression provided'
+                }), 400
+            
+            expression = data['expression'].strip()
+            
+            if not expression:
+                return jsonify({
+                    'success': False,
+                    'error': 'Empty expression'
+                }), 400
+            
+            # Check if compiler exists
+            if not os.path.exists(COMPILER_PATH):
+                return jsonify({
+                    'success': False,
+                    'error': f'Compiler not found. Please build the C++ compiler first.'
+                }), 500
+            
+            # Run the C++ compiler
+            try:
+                result = subprocess.run(
+                    [COMPILER_PATH, expression],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                # Parse the JSON output from the compiler
+                if result.returncode == 0:
+                    try:
+                        output = json.loads(result.stdout)
+                        return jsonify(output)
+                    except json.JSONDecodeError:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Invalid JSON output from compiler',
+                            'stdout': result.stdout,
+                            'stderr': result.stderr
+                        }), 500
+                else:
+                    # Compiler returned error
+                    try:
+                        error = json.loads(result.stderr)
+                        return jsonify(error), 400
+                    except:
+                        return jsonify({
+                            'success': False,
+                            'error': result.stderr or 'Compilation failed'
+                        }), 400
+                        
+            except subprocess.TimeoutExpired:
+                return jsonify({
+                    'success': False,
+                    'error': 'Compilation timeout'
+                }), 500
+                
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    subprocess.run: Execute external program (C++ compiler)
+    capture_output=True: Capture stdout and stderr
+    text=True: Return strings, not bytes
+    timeout=10: Kill after 10 seconds
+    
+    HTTP STATUS CODES:
+    200: Success
+    400: Bad Request (invalid input)
+    500: Internal Server Error
+    
+    FLOW:
+    1. Extract expression from JSON request body
+    2. Validate expression is not empty
+    3. Check compiler executable exists
+    4. Run: ./compiler.exe "expression"
+    5. Parse JSON output from compiler
+    6. Return to frontend
+
+Lines 102-200: Object File Analysis Endpoints
+    @app.route('/api/object/build', methods=['POST'])
+    def build_object_files():
+        """
+        Build object files with different optimization levels
+        
+        Expected JSON:
+        {
+            "sourceFile": "path/to/file.cpp"
+        }
+        """
+        try:
+            data = request.get_json()
+            source_file = data.get('sourceFile', '')
+            
+            if not source_file or not os.path.exists(source_file):
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid source file'
+                }), 400
+            
+            # Compile with -O0 (no optimization)
+            os.system(f'g++ -c {source_file} -O0 -o temp_O0.o')
+            
+            # Compile with -O2 (optimization level 2)
+            os.system(f'g++ -c {source_file} -O2 -o temp_O2.o')
+            
+            return jsonify({
+                'success': True,
+                'message': 'Object files built successfully',
+                'files': {
+                    'O0': 'temp_O0.o',
+                    'O2': 'temp_O2.o'
+                }
+            })
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    @app.route('/api/object/analyze', methods=['POST'])
+    def analyze_object_file():
+        """
+        Analyze object file using objdump and readelf
+        
+        Expected JSON:
+        {
+            "optimizationLevel": "O0" or "O2"
+        }
+        """
+        try:
+            data = request.get_json()
+            opt_level = data.get('optimizationLevel', 'O0')
+            
+            object_file = f'temp_{opt_level}.o'
+            
+            if not os.path.exists(object_file):
+                return jsonify({
+                    'success': False,
+                    'error': 'Object file not found. Build first.'
+                }), 400
+            
+            analyzer = ObjectFileAnalyzer(object_file)
+            
+            analysis = {
+                'success': True,
+                'disassembly': analyzer.get_disassembly(),
+                'symbols': analyzer.get_symbols(),
+                'sections': analyzer.get_sections(),
+                'metrics': analyzer.get_size_metrics()
+            }
+            
+            return jsonify(analysis)
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    OPTIMIZATION LEVELS:
+    -O0: No optimization (debugging, readable assembly)
+    -O2: Moderate optimization (faster code, smaller binary)
+    -O3: Aggressive optimization
+    
+    objdump: Displays information from object files (disassembly, symbols)
+    readelf: Reads ELF (Executable and Linkable Format) file structure
+
+Lines 500-517: Server Startup
+    if __name__ == '__main__':
+        print("=" * 60)
+        print("Mathematical Expression Compiler - Backend Server")
+        print("=" * 60)
+        print()
+        print(f"Compiler path: {COMPILER_PATH}")
+        print(f"Compiler exists: {os.path.exists(COMPILER_PATH)}")
+        print()
+        print("Starting server...")
+        print("Access the application at: http://localhost:5000")
+        print()
+        print("Press Ctrl+C to stop the server")
+        print("=" * 60)
+        print()
+        
+        app.run(debug=True, host='0.0.0.0', port=5000)
+    
+    debug=True: Auto-reload on code changes, detailed error messages
+    host='0.0.0.0': Listen on all network interfaces
+    port=5000: HTTP port
+    
+    WHY 0.0.0.0: Allows access from other machines on network, not just localhost
+
+
+================================================================================
+                    4. FRONTEND COMPONENTS (JavaScript/HTML/CSS)
+================================================================================
+
+--------------------------------------------------------------------------------
+                            4.1 APP.JS
+--------------------------------------------------------------------------------
+
+PURPOSE: Main frontend logic - API calls and result display
+
+Lines 1-7: Configuration
+    const API_BASE_URL = "http://localhost:5000";
+    
+    function setExample(expr) {
+      document.getElementById("expressionInput").value = expr;
+    }
+    
+    API_BASE_URL: Backend server address
+    setExample: Populate input field with example expression
+
+Lines 9-41: Compile Expression Function
+    async function compileExpression() {
+      const input = document.getElementById("expressionInput").value.trim();
+    
+      if (!input) {
+        showError("Please enter an expression");
+        return;
+      }
+    
+      // Hide all sections
+      hideAllSections();
+    
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/compile`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ expression: input }),
+        });
+    
+        const data = await response.json();
+    
+        if (data.success) {
+          displayResults(data);
+        } else {
+          showError(data.error || "Compilation failed");
+        }
+      } catch (error) {
+        showError(
+          `Network error: ${error.message}. Make sure the backend server is running.`
+        );
+      }
+    }
+    
+    async/await: Modern JavaScript for asynchronous code
+    fetch: Make HTTP request
+    JSON.stringify: Convert JavaScript object to JSON string
+    
+    FLOW:
+    1. Get expression from input field
+    2. Validate not empty
+    3. POST to /api/compile
+    4. Parse JSON response
+    5. Display results or error
+
+Lines 43-73: Display Results
+    function displayResults(data) {
+      // Show result
+      document.getElementById("resultSection").classList.remove("hidden");
+      const resultDiv = document.getElementById("resultValue");
+      resultDiv.innerHTML = `\\(${formatNumber(data.result)}\\)`;
+    
+      // Render MathJax
+      if (window.MathJax) {
+        MathJax.typesetPromise([resultDiv]).catch((err) => console.log(err));
+      }
+    
+      // Show tokens
+      if (data.tokens) {
+        showTokens(data.tokens);
+      }
+    
+      // Show postfix
+      if (data.postfix) {
+        showPostfix(data.postfix);
+      }
+    
+      // Show AST
+      if (data.ast) {
+        showAST(data.ast);
+      }
+    
+      // Show intermediate code
+      if (data.intermediateCode) {
+        showIntermediateCode(data.intermediateCode);
+      }
+    
+      // Show calculus visualization if applicable
+      if (data.calculusType !== "none" && data.calculusSteps) {
+        showCalculusVisualization(data);
+      }
+    }
+    
+    MathJax: JavaScript library for rendering mathematical notation
+    \\( ... \\): LaTeX math delimiters
+    typesetPromise: Asynchronously render math
+    
+    EXAMPLE: Result 3.14159 displayed as formatted number with proper decimal places
+
+Lines 75-120: Show Tokens
+    function showTokens(tokens) {
+      document.getElementById("tokensSection").classList.remove("hidden");
+      const container = document.getElementById("tokensDisplay");
+      container.innerHTML = "";
+    
+      const colorMap = {
+        NUMBER: "#3b82f6",      // Blue
+        PLUS: "#10b981",         // Green
+        MINUS: "#f59e0b",        // Yellow
+        MULTIPLY: "#ef4444",     // Red
+        DIVIDE: "#8b5cf6",       // Purple
+        POWER: "#ec4899",        // Pink
+        MODULO: "#14b8a6",       // Teal
+        FACTORIAL: "#f97316",    // Orange
+        LPAREN: "#64748b",       // Gray
+        RPAREN: "#64748b",       // Gray
+        COMMA: "#64748b",        // Gray
+        FUNCTION: "#8b5cf6",     // Purple
+        CONSTANT: "#3b82f6",     // Blue
+        VARIABLE: "#f59e0b",     // Yellow
+        END: "#94a3b8"           // Light gray
+      };
+    
+      tokens.forEach((token, index) => {
+        const tokenDiv = document.createElement("div");
+        tokenDiv.className = "token-item";
+        tokenDiv.style.borderLeft = `4px solid ${colorMap[token.type] || "#888"}`;
+        
+        let content = `
+          <div class="token-type" style="color: ${colorMap[token.type] || "#888"}">
+            ${token.type}
+          </div>
+          <div class="token-value">${escapeHtml(token.value)}</div>
+        `;
+        
+        if (token.numValue !== undefined) {
+          content += `<div class="token-number">${token.numValue}</div>`;
+        }
+        
+        tokenDiv.innerHTML = content;
+        container.appendChild(tokenDiv);
+      });
+    }
+    
+    COLOR CODING: Visual distinction between token types
+    DOM MANIPULATION: Create div elements dynamically
+    
+    EXAMPLE OUTPUT (visual representation):
+    [NUMBER: 2] [PLUS: +] [NUMBER: 3]
+
+Lines 200-250: Show Intermediate Code
+    function showIntermediateCode(code) {
+      document.getElementById("icSection").classList.remove("hidden");
+      const container = document.getElementById("icDisplay");
+      container.innerHTML = "";
+    
+      code.forEach((line, index) => {
+        const lineDiv = document.createElement("div");
+        lineDiv.className = "ic-line";
+        
+        // Syntax highlighting
+        let highlighted = line;
+        highlighted = highlighted.replace(/\b(t\d+)\b/g, '<span class="ic-temp">$1</span>');
+        highlighted = highlighted.replace(/=/g, '<span class="ic-operator">=</span>');
+        highlighted = highlighted.replace(/(\+|-|\*|\/|%|\^)/g, '<span class="ic-operator">$1</span>');
+        highlighted = highlighted.replace(/\b(fact|sin|cos|sqrt)\b/g, '<span class="ic-function">$1</span>');
+        
+        lineDiv.innerHTML = `<span class="ic-line-number">${index}</span> ${highlighted}`;
+        container.appendChild(lineDiv);
+      });
+    }
+    
+    REGEX SYNTAX HIGHLIGHTING:
+    /\b(t\d+)\b/g: Match temporary variables (t0, t1, ...)
+    /=/g: Match assignment operator
+    /(\+|-|\*|\/|%|\^)/g: Match arithmetic operators
+    /\b(fact|sin|cos|sqrt)\b/g: Match function names
+    
+    EXAMPLE:
+    Input: ["t0 = 5", "t1 = fact t0"]
+    Output (with colors):
+    0 t0 = 5
+    1 t1 = fact t0
+    (t0, t1 in blue; = in green; fact in purple)
+
+
+--------------------------------------------------------------------------------
+                            4.2 VISUALIZER.JS
+--------------------------------------------------------------------------------
+
+PURPOSE: AST visualization using D3.js tree layout
+
+Lines 1-119: Main Visualization Function
+    function showAST(astData) {
+      document.getElementById("astSection").classList.remove("hidden");
+    
+      // Clear previous visualization
+      const container = document.getElementById("astCanvas");
+      container.innerHTML = "";
+    
+      // Set up SVG dimensions
+      const width = container.clientWidth;
+      const height = 500;
+    
+      const svg = d3
+        .select("#astCanvas")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .append("g")
+        .attr("transform", "translate(40,20)");
+    
+      // Convert AST data to D3 hierarchy
+      const root = d3.hierarchy(convertASTToHierarchy(astData));
+    
+      // Create tree layout
+      const treeLayout = d3.tree().size([width - 100, height - 100]);
+    
+      treeLayout(root);
+    
+      // Add links (edges between nodes)
+      svg
+        .selectAll(".link")
+        .data(root.links())
+        .enter()
+        .append("path")
+        .attr("class", "link")
+        .attr(
+          "d",
+          d3
+            .linkVertical()
+            .x((d) => d.x)
+            .y((d) => d.y),
+        )
+        .style("stroke", "#6b7280")
+        .style("stroke-width", 2)
+        .style("fill", "none")
+        .style("opacity", 0)
+        .transition()
+        .duration(800)
+        .style("opacity", 0.6);
+    
+      // Add nodes
+      const nodes = svg
+        .selectAll(".node")
+        .data(root.descendants())
+        .enter()
+        .append("g")
+        .attr("class", "node")
+        .attr("transform", (d) => `translate(${d.x},${d.y})`)
+        .style("opacity", 0)
+        .transition()
+        .delay((d, i) => i * 100)
+        .duration(500)
+        .style("opacity", 1);
+    
+      // Add circles for nodes
+      svg
+        .selectAll(".node")
+        .append("circle")
+        .attr("r", (d) => {
+          if (d.data.type === "NUMBER" || d.data.type === "VARIABLE") return 25;
+          if (d.data.type === "BINARY_OP") return 30;
+          return 28;
+        })
+        .style("fill", (d) => getNodeColor(d.data.type))
+        .style("stroke", "#3b82f6")
+        .style("stroke-width", 2)
+        .style("cursor", "pointer")
+        .on("mouseover", function (event, d) {
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr("r", this.r.baseVal.value * 1.2)
+            .style("fill", "#2563eb");
+        })
+        .on("mouseout", function (event, d) {
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr("r", this.r.baseVal.value / 1.2)
+            .style("fill", getNodeColor(d.data.type));
+        });
+    
+      // Add text labels
+      svg
+        .selectAll(".node")
+        .append("text")
+        .attr("dy", 5)
+        .attr("text-anchor", "middle")
+        .style("fill", "#fff")
+        .style("font-weight", "bold")
+        .style("font-size", "12px")
+        .style("pointer-events", "none")
+        .text((d) => getNodeLabel(d.data));
+    }
+    
+    D3.js: Data-Driven Documents - JavaScript library for data visualization
+    d3.hierarchy: Convert tree data to D3 hierarchy structure
+    d3.tree(): Tree layout algorithm - positions nodes
+    linkVertical: Curved lines connecting parent to children
+    transition: Smooth animations
+    
+    MOUSEOVER EFFECT: Hover to enlarge node and change color
+    
+    COORDINATE SYSTEM:
+    - x: Horizontal position
+    - y: Vertical position (depth in tree)
+    - Tree grows downward
+
+Lines 121-180: Convert AST to Hierarchy
+    function convertASTToHierarchy(node) {
+      if (!node) return null;
+    
+      const result = {
+        type: node.type,
+        name: getNodeLabel(node),
+      };
+    
+      // Add node-specific properties
+      if (node.type === "NUMBER") {
+        result.value = node.value;
+      } else if (node.type === "VARIABLE") {
+        result.name = node.name;
+      } else if (node.type === "BINARY_OP") {
+        result.op = node.op;
+        result.children = [
+          convertASTToHierarchy(node.left),
+          convertASTToHierarchy(node.right),
+        ].filter(Boolean);
+      } else if (node.type === "NCR") {
+        result.children = [
+          convertASTToHierarchy(node.n),
+          convertASTToHierarchy(node.r),
+        ].filter(Boolean);
+      } else if (node.type === "NPR") {
+        result.children = [
+          convertASTToHierarchy(node.n),
+          convertASTToHierarchy(node.r),
+        ].filter(Boolean);
+      } else if (node.type === "FACTORIAL") {
+        result.children = [convertASTToHierarchy(node.operand)].filter(Boolean);
+      }
+    
+      return result;
+    }
+    
+    RECURSIVE CONVERSION:
+    - Traverse AST depth-first
+    - Create D3-compatible hierarchy structure
+    - filter(Boolean): Remove null children
+    
+    EXAMPLE: nCr(5, 2)
+    Input AST:
+    {
+        type: "NCR",
+        n: {type: "NUMBER", value: 5},
+        r: {type: "NUMBER", value: 2}
+    }
+    
+    Output Hierarchy:
+    {
+        type: "NCR",
+        name: "nCr",
+        children: [
+            {type: "NUMBER", name: "5", value: 5},
+            {type: "NUMBER", name: "2", value: 2}
+        ]
+    }
+
+Lines 182-200: Node Colors and Labels
+    function getNodeColor(type) {
+      const colors = {
+        NUMBER: "#3b82f6",        // Blue
+        VARIABLE: "#f59e0b",      // Yellow/Orange
+        BINARY_OP: "#10b981",     // Green
+        UNARY_OP: "#f97316",      // Orange
+        FUNCTION_CALL: "#8b5cf6", // Purple
+        DIFF_NODE: "#ef4444",     // Red
+        INTEGRATE_NODE: "#06b6d4",// Cyan
+        NCR: "#3b82f6",           // Blue
+        NPR: "#3b82f6",           // Blue
+        FACTORIAL: "#f97316",     // Orange
+      };
+      return colors[type] || "#3b82f6";
+    }
+    
+    function getNodeLabel(node) {
+      if (!node) return "";
+    
+      if (node.type === "NUMBER") {
+        return String(node.value || node.numValue || "0");
+      } else if (node.type === "VARIABLE") {
+        return node.name || "x";
+      } else if (node.type === "BINARY_OP") {
+        return node.op || "+";
+      } else if (node.type === "NCR") {
+        return "nCr";
+      } else if (node.type === "NPR") {
+        return "nPr";
+      } else if (node.type === "FACTORIAL") {
+        return "!";
+      }
+    
+      return node.type || "?";
+    }
+    
+    COLOR SCHEME: Visual distinction for different node types
+    LABELS: Concise text displayed in circles
+
+
+================================================================================
+                    5. COMMON FACULTY QUESTIONS & ANSWERS
+================================================================================
+
+Q1: "Why did you choose C++ for the compiler instead of Python?"
+A: "C++ offers:
+    1. Better performance for intensive computations (factorial, integration)
+    2. Strong typing catches errors at compile time
+    3. Memory management control for optimization
+    4. Closer to assembly - good for learning low-level concepts
+    5. Industry standard for compiler construction
+    
+    Python handles the web server well due to Flask's simplicity."
+
+Q2: "What is the time complexity of your factorial function?"
+A: "O(n) where n is the input number.
+    - Single loop from 2 to n
+    - Each iteration: one multiplication (O(1))
+    - Total: O(n) multiplications
+    
+    Space complexity: O(1) - only stores result variable"
+
+Q3: "How does the Shunting Yard algorithm handle operator precedence?"
+A: "The algorithm uses a stack and precedence values:
+    1. Higher precedence operators wait on stack
+    2. Lower/equal precedence triggers popping
+    3. Example: 2+3*4
+       - See +, push to stack
+       - See *, higher precedence than +, push to stack
+       - End: pop *, then +
+       - Result: 2 3 4 * + (postfix)
+    
+    This ensures * binds tighter than +, giving correct tree structure."
+
+Q4: "What's the difference between AST and parse tree?"
+A: "Parse Tree: Every grammar rule becomes a node (verbose)
+    AST: Semantic structure only (concise)
+    
+    Example: 2 + 3
+    
+    Parse Tree:
+        Expression
+           / | \
+    Number Op Number
+       |    |    |
+       2    +    3
+    
+    AST:
+       +
+      / \
+     2   3
+    
+    AST is used in real compilers for efficiency."
+
+Q5: "Why use postfix notation internally?"
+A: "Postfix (Reverse Polish Notation) advantages:
+    1. No parentheses needed
+    2. No ambiguity in operator precedence
+    3. Easy stack-based evaluation
+    4. Directly maps to assembly code
+    
+    Example evaluation: 2 3 4 * +
+    Stack: [2]
+    Stack: [2, 3]
+    Stack: [2, 3, 4]
+    *: Pop 4, 3, push 12, Stack: [2, 12]
+    +: Pop 12, 2, push 14, Stack: [14]"
+
+Q6: "How do you ensure type safety in the evaluator?"
+A: "Multiple layers:
+    1. Semantic checks in evaluateNode() before computation
+    2. Integer validation: n == std::floor(n)
+    3. Range validation: r <= n for nCr/nPr
+    4. Overflow prevention: n <= 170 for factorial
+    5. Division by zero checks
+    6. Runtime exceptions with descriptive messages"
+
+Q7: "What is intermediate code and why generate it?"
+A: "Three-address code: result = operand1 operator operand2
+    
+    Benefits:
+    1. Platform-independent representation
+    2. Easier optimization (constant folding, dead code elimination)
+    3. Clear step-by-step execution path
+    4. Educational value - shows translation process
+    5. Facilitates debugging
+    
+    Example: (2+3)*4
+    t0 = 2
+    t1 = 3
+    t2 = t0 + t1  // 2+3
+    t3 = 4
+    t4 = t2 * t3  // 5*4"
+
+Q8: "How does your system handle errors?"
+A: "Multi-level error handling:
+    
+    1. Lexer: Invalid characters -> INVALID token
+    2. Parser: Mismatched parentheses -> runtime_error
+    3. Evaluator: 
+       - Division by zero -> runtime_error
+       - Undefined variables -> runtime_error
+       - Type errors (factorial of 3.5) -> runtime_error
+       - Overflow -> runtime_error
+    4. Backend: Try-catch, return JSON with error message
+    5. Frontend: Display user-friendly error in red box
+    
+    All errors propagate to user with descriptive messages."
+
+Q9: "Why use smart pointers (shared_ptr) instead of raw pointers?"
+A: "Smart pointers provide:
+    1. Automatic memory management (no manual delete)
+    2. Reference counting prevents memory leaks
+    3. Exception safety
+    4. Clear ownership semantics
+    
+    Example without smart pointers (problematic):
+    ASTNode* left = new NumberNode(2);
+    ASTNode* right = new NumberNode(3);
+    if (error) return;  // MEMORY LEAK!
+    // Forgot to delete left and right
+    
+    With shared_ptr:
+    auto left = make_shared<NumberNode>(2);
+    auto right = make_shared<NumberNode>(3);
+    if (error) return;  // Automatic cleanup!"
+
+Q10: "How does the frontend communicate with the backend?"
+A: "REST API architecture:
+    
+    1. Frontend: JavaScript fetch() sends HTTP POST
+       URL: http://localhost:5000/api/compile
+       Body: {"expression": "2+3"}
+       
+    2. Network: HTTP request over TCP/IP
+    
+    3. Backend: Flask route @app.route('/api/compile')
+       - Receives JSON
+       - Runs C++ compiler as subprocess
+       - Returns JSON response
+       
+    4. Frontend: Receives response
+       - Parse JSON
+       - Display results
+       - Update visualizations
+    
+    CORS enables cross-origin requests."
+
+Q11: "What optimization techniques does your compiler use?"
+A: "Currently minimal optimizations (educational focus):
+    
+    1. Constant folding possible in intermediate code
+    2. Direct evaluation (not interpretation of intermediate code)
+    3. Efficient factorial (iterative, not recursive)
+    
+    The object file analyzer shows GCC optimizations:
+    - -O0: No optimization (readable, debuggable)
+    - -O2: Moderate (inlining, dead code elimination, strength reduction)
+    
+    Future enhancements could include:
+    - Common subexpression elimination
+    - Dead code elimination in three-address code
+    - Algebraic simplification (x*1 = x, x+0 = x)"
+
+Q12: "How does the AST visualization work?"
+A: "D3.js tree layout algorithm:
+    
+    1. Convert AST to D3 hierarchy format (recursive)
+    2. Calculate node positions:
+       - d3.tree().size() distributes nodes
+       - Parents centered above children
+       - Equal spacing between siblings
+    3. Draw SVG elements:
+       - Paths for edges (linkVertical)
+       - Circles for nodes
+       - Text labels
+    4. Add interactivity:
+       - Hover effects (enlarge, color change)
+       - Smooth transitions
+    
+    Layout Algorithm:
+    - Post-order traversal
+    - Bottom-up positioning
+    - Maintains tree balance"
+
+Q13: "Explain the complete flow for 'nCr(5,2)'"
+A: "Step-by-step execution:
+    
+    1. FRONTEND:
+       - User types 'nCr(5,2)'
+       - Clicks Compile
+       - fetch() POSTs to /api/compile
+    
+    2. BACKEND:
+       - Flask receives request
+       - subprocess.run('./compiler.exe', 'nCr(5,2)')
+    
+    3. COMPILER - LEXER:
+       - Position 0: 'n' -> readIdentifier() -> 'nCr' -> FUNCTION
+       - Position 3: '(' -> LPAREN
+       - Position 4: '5' -> NUMBER(5)
+       - Position 5: ',' -> COMMA
+       - Position 6: '2' -> NUMBER(2)
+       - Position 7: ')' -> RPAREN
+       Tokens: [FUNCTION(nCr), LPAREN, NUMBER(5), COMMA, NUMBER(2), RPAREN, END]
+    
+    4. COMPILER - PARSER (Shunting Yard):
+       - FUNCTION -> Push to operator stack
+       - LPAREN -> Push to operator stack
+       - NUMBER(5) -> Output queue
+       - COMMA -> Pop until LPAREN (none)
+       - NUMBER(2) -> Output queue
+       - RPAREN -> Pop until LPAREN, then pop FUNCTION
+       Postfix: [NUMBER(5), NUMBER(2), FUNCTION(nCr)]
+    
+    5. COMPILER - PARSER (Build AST):
+       - NUMBER(5) -> Push NumberNode(5)
+       - NUMBER(2) -> Push NumberNode(2)
+       - FUNCTION(nCr) -> Pop 2, Pop 5, Create NCrNode(NumberNode(5), NumberNode(2))
+       AST: NCrNode with n=NumberNode(5), r=NumberNode(2)
+    
+    6. COMPILER - INTERMEDIATE CODE:
+       - t0 = 5
+       - t1 = 2
+       - t2 = fact t0     (5! = 120)
+       - t3 = fact t1     (2! = 2)
+       - t4 = t0 - t1     (5 - 2 = 3)
+       - t5 = fact t4     (3! = 6)
+       - t6 = t3 * t5     (2 * 6 = 12)
+       - t7 = t2 / t6     (120 / 12 = 10)
+    
+    7. COMPILER - EVALUATION:
+       - evaluateNode(NCrNode)
+       - Validate: n=5, r=2, both integers, 2<=5 ✓
+       - Calculate: 5! / (2! * 3!) = 120 / 12 = 10
+       Result: 10
+    
+    8. COMPILER - JSON OUTPUT:
+       {
+           'success': true,
+           'expression': 'nCr(5,2)',
+           'tokens': [...],
+           'postfix': [...],
+           'ast': {'type':'NCR', 'n':{'type':'NUMBER','value':5}, ...},
+           'intermediateCode': ['t0 = 5', ...],
+           'result': 10,
+           ...
+       }
+    
+    9. BACKEND:
+       - Parse JSON output
+       - Return to frontend
+    
+    10. FRONTEND:
+        - Display result: 10
+        - Show tokens with colors
+        - Visualize AST tree:
+              nCr
+              / \
+             5   2
+        - Display intermediate code with syntax highlighting
+    
+    Total time: ~50-100ms"
+
+Q14: "What data structures are used and why?"
+A: "1. std::vector<Token>
+       - Dynamic array of tokens
+       - Random access: O(1)
+       - Used for: token stream, postfix notation
+    
+    2. std::stack<Token>
+       - LIFO for operator ordering
+       - Used in: Shunting Yard algorithm
+       - Push/Pop: O(1)
+    
+    3. std::unordered_map<string, double>
+       - Hash table for variables
+       - Lookup: O(1) average
+       - Used for: variable storage, function names
+    
+    4. std::shared_ptr<ASTNode>
+       - Smart pointer for tree nodes
+       - Reference counted
+       - Automatic memory management
+    
+    5. Tree (implicit in AST)
+       - Hierarchical expression structure
+       - Traversal: O(n) where n = nodes
+    
+    Choice rationale:
+    - Vectors: Frequent iteration, random access
+    - Stack: LIFO property essential for parsing
+    - Hash map: Fast symbol lookup
+    - Shared pointers: Safety, ease of use
+    - Tree: Natural expression representation"
+
+Q15: "How would you extend this to support variables like 'x+y'?"
+A: "Already supported! Steps:
+    
+    1. Lexer: Identifies variables (not in functions/constants map)
+       'x' -> VARIABLE token
+       'y' -> VARIABLE token
+    
+    2. Parser: Creates VariableNode('x'), VariableNode('y')
+    
+    3. AST: BinaryOpNode('+', VariableNode('x'), VariableNode('y'))
+    
+    4. Evaluation: Need to set variable values first
+       evaluator.setVariable('x', 5.0);
+       evaluator.setVariable('y', 3.0);
+       result = evaluator.evaluate(ast);  // 8.0
+    
+    5. Frontend: Add input fields for variable values
+    
+    Extension for symbolic computation:
+    - Store AST without evaluating
+    - Implement differentiation rules (d/dx of x+y = 1+0)
+    - Symbolic simplification
+    
+    This requires more advanced symbolic algebra library."
+
+
+================================================================================
+                    6. ARCHITECTURE DIAGRAMS (ASCII)
+================================================================================
+
+SYSTEM ARCHITECTURE:
+--------------------
+
+    ┌─────────────────────────────────────────┐
+    │          USER INTERFACE (Browser)        │
+    │                                          │
+    │  ┌────────────┐  ┌──────────────────┐   │
+    │  │  Input     │  │  Visualizations  │   │
+    │  │  Field     │  │  - AST Tree      │   │
+    │  │            │  │  - Tokens        │   │
+    │  │ [Compile]  │  │  - Code          │   │
+    │  └────────────┘  └──────────────────┘   │
+    │         │                  ▲             │
+    │         │                  │             │
+    │         ▼                  │             │
+    │    JavaScript (app.js, visualizer.js)   │
+    └─────────────────────────────────────────┘
+                   │                  ▲
+                   │  HTTP POST       │  JSON Response
+                   │  /api/compile    │
+                   ▼                  │
+    ┌─────────────────────────────────────────┐
+    │      BACKEND SERVER (Flask/Python)       │
+    │                                          │
+    │  ┌────────────────────────────────────┐ │
+    │  │  Route: /api/compile               │ │
+    │  │  - Validate input                  │ │
+    │  │  - Run subprocess                  │ │
+    │  │  - Return JSON                     │ │
+    │  └────────────────────────────────────┘ │
+    └─────────────────────────────────────────┘
+                   │                  ▲
+                   │  Execute         │  JSON Output
+                   │  ./compiler.exe  │  (stdout)
+                   ▼                  │
+    ┌─────────────────────────────────────────┐
+    │        C++ COMPILER EXECUTABLE           │
+    │                                          │
+    │  ┌────────┐  ┌────────┐  ┌──────────┐  │
+    │  │ Lexer  │→ │ Parser │→ │ Evaluator│  │
+    │  └────────┘  └────────┘  └──────────┘  │
+    │      │            │             │        │
+    │      ▼            ▼             ▼        │
+    │   Tokens        AST        Result        │
+    │                  │                        │
+    │                  ▼                        │
+    │          Intermediate Code                │
+    └─────────────────────────────────────────┘
+
+
+COMPILER PIPELINE:
+------------------
+
+Input: "2 + 3 * 4"
+│
+├─► LEXER
+│   └─► [NUMBER(2), PLUS, NUMBER(3), MULTIPLY, NUMBER(4), END]
+│
+├─► PARSER - Shunting Yard
+│   └─► Postfix: [2, 3, 4, *, +]
+│
+├─► PARSER - Build AST
+│   └─►      +
+│           / \
+│          2   *
+│             / \
+│            3   4
+│
+├─► CODE GENERATOR
+│   └─► t0 = 2
+│       t1 = 3
+│       t2 = 4
+│       t3 = t1 * t2
+│       t4 = t0 + t3
+│
+├─► EVALUATOR
+│   └─► Result: 14
+│
+└─► JSON OUTPUT
+    └─► {"success": true, "result": 14, ...}
+
+
+MEMORY LAYOUT (AST for "2+3*4"):
+---------------------------------
+
+Heap Memory:
+
+Address    Object              Fields
+0x1000     BinaryOpNode       op="+", left=0x1010, right=0x1020
+0x1010     NumberNode         value=2.0
+0x1020     BinaryOpNode       op="*", left=0x1030, right=0x1040
+0x1030     NumberNode         value=3.0
+0x1040     NumberNode         value=4.0
+
+Stack (during evaluation):
+
+evaluateNode(0x1000)
+├─ evaluateNode(0x1010) → 2.0
+└─ evaluateNode(0x1020)
+   ├─ evaluateNode(0x1030) → 3.0
+   └─ evaluateNode(0x1040) → 4.0
+   └─ return 3.0 * 4.0 = 12.0
+└─ return 2.0 + 12.0 = 14.0
+
+
+CLASS HIERARCHY:
+----------------
+
+            ASTNode (abstract)
+                 │
+        ┌────────┼────────┬──────────┬───────────┬──────────┐
+        │        │        │          │           │          │
+    NumberNode  VariableNode  BinaryOpNode  UnaryOpNode  FunctionCallNode
+                                                               │
+                                        ┌──────────────────────┼──────────┐
+                                    DiffNode              IntegrateNode    │
+                                                                           │
+                                                        ┌──────────────────┼──────────┐
+                                                   FactorialNode      NCrNode     NPrNode
+
+
+TOKEN FLOW (Shunting Yard for "2+3*4"):
+----------------------------------------
+
+Input:  2  +  3  *  4
+
+Step   Token   Output Queue        Operator Stack      Action
+────────────────────────────────────────────────────────────────
+1      2       [2]                 []                  Number→Output
+2      +       [2]                 [+]                 Operator→Stack
+3      3       [2, 3]              [+]                 Number→Output
+4      *       [2, 3]              [+, *]              * higher than +, push
+5      4       [2, 3, 4]           [+, *]              Number→Output
+6      END     [2, 3, 4, *]        [+]                 Pop *, higher precedence
+7              [2, 3, 4, *, +]     []                  Pop +
+
+Result: [2, 3, 4, *, +]
+
+
+================================================================================
+                        END OF DOCUMENTATION
+================================================================================
+
+TIPS FOR PRESENTATION:
+----------------------
+1. Start with system architecture diagram
+2. Explain data flow with concrete example
+3. Demonstrate live: type expression, show results
+4. Walk through code for one component (e.g., parser)
+5. Discuss design decisions and trade-offs
+6. Be ready to explain any line of code
+7. Prepare answers for common questions above
+8. Practice explaining complex concepts simply
+9. Have debugger ready to step through code
+10. Know your complexity analysis
+
+GOOD LUCK WITH YOUR PRESENTATION!

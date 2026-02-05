@@ -7,9 +7,19 @@ function showAST(astData) {
   const container = document.getElementById("astCanvas");
   container.innerHTML = "";
 
-  // Set up SVG dimensions
+  // Convert AST data to D3 hierarchy first to calculate tree depth
+  const hierarchyData = convertASTToHierarchy(astData);
+  const root = d3.hierarchy(hierarchyData);
+
+  // Calculate tree depth and node count
+  const treeDepth = root.height;
+  const nodeCount = root.descendants().length;
+
+  // Set up SVG dimensions - adjust based on tree complexity
   const width = container.clientWidth;
-  const height = 500;
+  const baseHeight = 500;
+  const heightPerLevel = 180;
+  const height = Math.max(baseHeight, (treeDepth + 1) * heightPerLevel + 120);
 
   const svg = d3
     .select("#astCanvas")
@@ -17,13 +27,10 @@ function showAST(astData) {
     .attr("width", width)
     .attr("height", height)
     .append("g")
-    .attr("transform", "translate(40,20)");
+    .attr("transform", "translate(50,40)");
 
-  // Convert AST data to D3 hierarchy
-  const root = d3.hierarchy(convertASTToHierarchy(astData));
-
-  // Create tree layout
-  const treeLayout = d3.tree().size([width - 100, height - 100]);
+  // Create tree layout with dynamic spacing
+  const treeLayout = d3.tree().size([width - 120, height - 100]);
 
   treeLayout(root);
 
